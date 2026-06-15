@@ -1,0 +1,15 @@
+{
+  "name": "static-md-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node site.js build",
+    "serve": "node site.js serve --port 3000"
+  },
+  "dependencies": {
+    "express": "^4.22.1",
+    "gray-matter": "^4.0.3",
+    "markdown-it": "^14.1.1",
+    "mime": "^4.1.0"
+  }
+}
