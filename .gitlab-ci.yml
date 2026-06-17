@@ -1,0 +1,19 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: never
+
+stages:
+  - test
+
+test:
+  stage: test
+  image: node:24
+  script:
+    - npm ci
+    - npm run test:junit
+  artifacts:
+    when: always
+    reports:
+      junit: reports/junit.xml

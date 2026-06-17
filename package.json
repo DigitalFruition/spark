@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "build": "node site.js build",
-    "serve": "node site.js serve --port 3000"
+    "serve": "node site.js serve --port 3000",
+    "test": "node --test",
+    "test:junit": "node -e \"fs.mkdirSync('reports', { recursive: true })\" && node --test --test-reporter=junit --test-reporter-destination=reports/junit.xml"
   },
   "dependencies": {
     "express": "^4.22.1",

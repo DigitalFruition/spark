@@ -345,6 +345,20 @@ to the desired static hosting platform.
 
 ---
 
+# Testing
+
+Run the deterministic test suite with:
+
+```bash
+npm test
+```
+
+GitLab CI runs the same tests and publishes JUnit XML test reports for merge requests and `main` branch pipelines.
+
+See `TESTING.MD` for the current test cases, fixture strategy, and CI reporting details.
+
+---
+
 # Asset Handling
 
 Non-Markdown files are copied directly into the output directory.
