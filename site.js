@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import fssync from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import mime from "mime";
 import MarkdownIt from "markdown-it";
@@ -401,7 +402,20 @@ async function main() {
   process.exit(1);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+export {
+  DEFAULTS,
+  build,
+  buildRenderer,
+  deriveTitle,
+  guessSourceMdFromUrl,
+  parseArgs,
+  renderMarkdownToHtml,
+};
+
+// Run the CLI only when this file is executed directly, not when imported by tests.
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
