@@ -17,6 +17,7 @@ const md = new MarkdownIt({
 
 const ASSETS_DIR = "assets";
 const ROOT_STATIC_FILES = ["favicon.ico", "robots.txt"];
+const DEFAULT_INCLUDE_DIRS = ["includes", "components"];
 
 const DEFAULTS = {
   srcDir: process.cwd(),
@@ -57,6 +58,70 @@ function isUnderDir(filePath, dirPath) {
   return !!rel && !rel.startsWith("..") && !path.isAbsolute(rel);
 }
 
+class IncludeError extends Error {
+  constructor(code, includeRef, detail) {
+    const displayRef = path.isAbsolute(includeRef) ? "[absolute path]" : toPosix(includeRef);
+    super(`Include ${code}: ${displayRef}${detail ? ` (${detail})` : ""}`);
+    this.name = "IncludeError";
+    this.code = code;
+    this.includeRef = includeRef;
+  }
+}
+
+function allowedIncludeDirs(ctx) {
+  return (ctx.allowedIncludeDirs ?? DEFAULT_INCLUDE_DIRS)
+    .map((dir) => path.resolve(ctx.srcRoot, dir))
+    .filter((dir) => isUnderDir(dir, ctx.srcRoot));
+}
+
+function resolveIncludePath(includeRef, ctx) {
+  if (path.isAbsolute(includeRef)) {
+    throw new IncludeError("absolute-path", includeRef, "absolute include paths are not allowed");
+  }
+
+  const includePath = path.resolve(ctx.srcRoot, includeRef);
+  const allowedDirs = allowedIncludeDirs(ctx);
+  const inAllowedDir = allowedDirs.some((dir) => isUnderDir(includePath, dir));
+
+  if (!inAllowedDir) {
+    const allowedLabels = (ctx.allowedIncludeDirs ?? DEFAULT_INCLUDE_DIRS).map((dir) => `${toPosix(dir)}/`);
+    throw new IncludeError(
+      "outside-allowed-dirs",
+      includeRef,
+      `includes must be under ${allowedLabels.join(" or ")}`,
+    );
+  }
+
+  return { includePath, allowedDir: allowedDirs.find((dir) => isUnderDir(includePath, dir)) };
+}
+
+async function realIncludePath(includeRef, includePath, allowedDir) {
+  let realPath;
+  let realAllowedDir;
+  try {
+    realPath = await fs.realpath(includePath);
+    realAllowedDir = await fs.realpath(allowedDir);
+  } catch (e) {
+    if (e?.code === "ENOENT") {
+      throw new IncludeError("missing", includeRef, "file was not found");
+    }
+    if (e?.syscall === "realpath") {
+      throw new IncludeError("read-failed", includeRef, "file could not be read");
+    }
+    throw e;
+  }
+
+  if (!isUnderDir(realPath, realAllowedDir)) {
+    throw new IncludeError(
+      "outside-allowed-dirs",
+      includeRef,
+      "includes must resolve inside an approved include directory",
+    );
+  }
+
+  return realPath;
+}
+
 function changeExt(filePath, newExt) {
   return filePath.replace(/\.[^.]+$/, newExt);
 }
@@ -79,31 +144,41 @@ const INCLUDE_RE = /<!--\s*include:\s*([^\s]+)\s*-->/g;
 async function renderIncludes(htmlOrTemplate, ctx) {
   // ctx: { srcRoot, cache, renderMarkdownPartial, visited }
   return replaceAsync(htmlOrTemplate, INCLUDE_RE, async (_m, includeRef) => {
-    const includePath = path.resolve(ctx.srcRoot, includeRef);
+    const { includePath, allowedDir } = resolveIncludePath(includeRef, ctx);
+    const readableIncludePath = await realIncludePath(includeRef, includePath, allowedDir);
 
     // Prevent trivial cycles.
-    if (ctx.visited.has(includePath)) {
+    if (ctx.visited.has(readableIncludePath)) {
       return `<!-- include-cycle: ${toPosix(includeRef)} -->`;
     }
 
-    const key = `inc:${includePath}`;
+    const key = `inc:${readableIncludePath}`;
     const cached = ctx.cache.get(key);
     if (cached) return cached;
 
-    ctx.visited.add(includePath);
+    ctx.visited.add(readableIncludePath);
     let out = "";
     try {
-      const content = await readText(includePath);
+      const content = await readText(readableIncludePath);
       if (includePath.endsWith(".md")) {
-        out = await ctx.renderMarkdownPartial(content, includePath);
+        out = await ctx.renderMarkdownPartial(content, readableIncludePath);
       } else {
         // Assume HTML/text fragment
         out = await renderIncludes(content, { ...ctx, visited: ctx.visited });
       }
     } catch (e) {
-      out = `<!-- include-missing: ${toPosix(includeRef)} -->`;
+      if (e instanceof IncludeError) {
+        throw e;
+      }
+      if (e?.code === "ENOENT") {
+        throw new IncludeError("missing", includeRef, "file was not found");
+      }
+      if (e?.syscall === "open") {
+        throw new IncludeError("read-failed", includeRef, "file could not be read");
+      }
+      throw e;
     } finally {
-      ctx.visited.delete(includePath);
+      ctx.visited.delete(readableIncludePath);
     }
 
     ctx.cache.set(key, out);
@@ -158,6 +233,7 @@ async function buildRenderer(config) {
   const ctxBase = {
     srcRoot,
     cache,
+    allowedIncludeDirs: [config.includesDir, config.componentsDir],
     visited: new Set(),
     renderMarkdownPartial: async (mdText, mdPath) => {
       const { bodyHtml } = await renderMarkdownToHtml(mdText, mdPath);
@@ -371,6 +447,10 @@ async function serve(config) {
       res.setHeader("Cache-Control", "no-store");
       res.type("text/html").send(html);
     } catch (e) {
+      if (e instanceof IncludeError) {
+        res.status(500).type("text/plain").send(e.message);
+        return;
+      }
       res.status(500).type("text/plain").send(String(e?.stack || e));
     }
   });
@@ -426,7 +506,7 @@ export {
 // Run the CLI only when this file is executed directly, not when imported by tests.
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   main().catch((e) => {
-    console.error(e);
+    console.error(e instanceof IncludeError ? e.message : e);
     process.exit(1);
   });
 }

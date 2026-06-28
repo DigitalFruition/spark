@@ -73,6 +73,64 @@ It verifies:
 
 This protects the basic page rendering path used by both preview and static build flows.
 
+### `renders valid Markdown includes from approved component directory`
+
+This test renders a page that includes a Markdown component from `components/`.
+
+It verifies:
+
+* Markdown include targets under the approved component directory are allowed.
+* Included Markdown is rendered to HTML.
+* Valid includes continue to work after include path validation.
+
+This protects reusable Markdown components from regressions in include validation.
+
+### `rejects missing includes with a controlled error`
+
+This test runs the static build against a page that references a missing include.
+
+It verifies:
+
+* Missing includes fail rendering.
+* The failure is reported as an `IncludeError`.
+* The diagnostic identifies the include reference without exposing the fixture source directory path.
+
+This protects build and preview diagnostics from leaking unnecessary local filesystem details.
+
+### `rejects traversal includes that escape approved directories`
+
+This test runs the static build against a page with an include reference that uses `..` traversal to escape `includes/`.
+
+It verifies:
+
+* Traversal includes outside approved include directories fail rendering.
+* The failure is reported as an `IncludeError`.
+
+This protects include resolution from reading arbitrary files under the website source root.
+
+### `rejects absolute-path includes`
+
+This test runs the static build against a page that references an include by absolute path.
+
+It verifies:
+
+* Absolute include paths fail rendering even when they point at an otherwise valid include file.
+* The failure is reported as an `IncludeError`.
+
+This protects include resolution from bypassing project-relative include boundaries.
+
+### `rejects includes that resolve outside approved directories through symlinks`
+
+This test runs the static build against a page with an include reference that points to a symlink inside `includes/`.
+
+It verifies:
+
+* Include validation checks the real resolved file path before reading.
+* Symlinks cannot be used to include files outside approved include directories.
+* The failure is reported as an `IncludeError`.
+
+This protects include resolution from bypassing approved directories through filesystem links.
+
 ### `build writes output from an isolated website directory`
 
 This test runs the static build against an isolated temporary website directory.
