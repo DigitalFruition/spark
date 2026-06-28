@@ -234,7 +234,9 @@ The renderer will:
 3. Insert the resulting HTML
 4. Resolve nested includes recursively
 
-Missing includes, absolute-path includes, and includes that use `..` traversal to escape the approved directories fail rendering with a controlled include diagnostic. Static build mode exits non-zero. Live preview mode returns a `500` response with a readable diagnostic.
+Nested includes are supported across HTML and Markdown fragments. For example, an HTML include may include another HTML fragment or a Markdown component, and a Markdown component may include additional fragments.
+
+Missing includes, include cycles, absolute-path includes, and includes that use `..` traversal to escape the approved directories fail rendering with a controlled include diagnostic. Static build mode exits non-zero. Live preview mode returns a `500` response with a readable diagnostic.
 
 ---
 

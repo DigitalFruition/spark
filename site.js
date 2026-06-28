@@ -147,9 +147,9 @@ async function renderIncludes(htmlOrTemplate, ctx) {
     const { includePath, allowedDir } = resolveIncludePath(includeRef, ctx);
     const readableIncludePath = await realIncludePath(includeRef, includePath, allowedDir);
 
-    // Prevent trivial cycles.
+    // Fail deterministically instead of generating partial output.
     if (ctx.visited.has(readableIncludePath)) {
-      return `<!-- include-cycle: ${toPosix(includeRef)} -->`;
+      throw new IncludeError("cycle", includeRef, "recursive include cycle detected");
     }
 
     const key = `inc:${readableIncludePath}`;
