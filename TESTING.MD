@@ -85,6 +85,44 @@ It verifies:
 
 This protects the ability to run the generator against a website directory outside the generator package.
 
+### `build output contains only deployable generated files`
+
+This test runs the static build against an isolated temporary website directory that includes source files, package metadata, fake dependency and Git directories, local planning files, and stale build output.
+
+It verifies:
+
+* Rendered page output is still generated.
+* Project source files are not copied to the build output.
+* Package metadata is not copied to the build output.
+* `.git/`, `node_modules/`, and `_Project/` contents are not copied to the build output.
+* Previous build output is removed before the new build is written.
+
+This protects `dist/` as a directory that can be published directly.
+
+### `ignores custom assetsDir and uses the fixed assets convention`
+
+This test runs the static build with an ignored custom `assetsDir` value that points outside the isolated temporary website directory.
+
+It verifies:
+
+* Rendered page output is still generated.
+* The external assets directory is not read.
+* The ignored asset path does not create files outside the configured output directory.
+
+This protects the fixed `assets/` convention from path traversal regressions.
+
+### `copies approved static assets from the asset convention`
+
+This test runs the static build against an isolated temporary website directory with assets in the approved static asset locations.
+
+It verifies:
+
+* Files under `assets/` are copied to `dist/assets/`.
+* Nested asset paths are preserved.
+* Approved root static files such as `favicon.ico` and `robots.txt` are copied when present.
+
+This protects the deliberate asset-copying convention while avoiding a broad repository-root copy.
+
 ## Adding Tests
 
 Prefer tests that create their own temporary fixture websites.

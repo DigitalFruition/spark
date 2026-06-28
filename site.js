@@ -15,6 +15,9 @@ const md = new MarkdownIt({
   typographer: true,
 });
 
+const ASSETS_DIR = "assets";
+const ROOT_STATIC_FILES = ["favicon.ico", "robots.txt"];
+
 const DEFAULTS = {
   srcDir: process.cwd(),
   contentDir: "content",
@@ -148,6 +151,7 @@ async function renderMarkdownToHtml(markdownText, filePath) {
 }
 
 async function buildRenderer(config) {
+  config = { ...DEFAULTS, ...config };
   const cache = new Map(); // include cache etc.
   const srcRoot = config.srcDir;
 
@@ -223,26 +227,33 @@ async function* walkFiles(dir) {
   }
 }
 
-async function copyStaticAssets(srcDir, outDir, skipExts = new Set([".md"])) {
-  for await (const file of walkFiles(srcDir)) {
-    const rel = path.relative(srcDir, file);
-    const ext = path.extname(file).toLowerCase();
+async function copyStaticAssets(config, outDir) {
+  const absAssetsDir = path.resolve(config.srcDir, ASSETS_DIR);
 
-    // Don’t copy markdown (we render it)
-    if (skipExts.has(ext)) continue;
+  if (fssync.existsSync(absAssetsDir)) {
+    for await (const file of walkFiles(absAssetsDir)) {
+      const rel = path.relative(absAssetsDir, file);
+      const outPath = path.join(outDir, ASSETS_DIR, rel);
+      await ensureDir(path.dirname(outPath));
+      await fs.copyFile(file, outPath);
+    }
+  }
 
-    // Don’t copy includes/template source files
-    if (rel.startsWith(DEFAULTS.includesDir + path.sep)) continue;
-    if (rel.startsWith(DEFAULTS.componentsDir + path.sep)) continue;
-    if (rel === DEFAULTS.templateFile) continue;
+  for (const fileName of ROOT_STATIC_FILES) {
+    const srcPath = path.resolve(config.srcDir, fileName);
+    if (!fssync.existsSync(srcPath)) continue;
 
-    const outPath = path.join(outDir, rel);
+    const stat = await fs.stat(srcPath);
+    if (!stat.isFile()) continue;
+
+    const outPath = path.join(outDir, fileName);
     await ensureDir(path.dirname(outPath));
-    await fs.copyFile(file, outPath);
+    await fs.copyFile(srcPath, outPath);
   }
 }
 
 async function build(config) {
+  config = { ...DEFAULTS, ...config };
   const absContentDir = path.resolve(config.srcDir, config.contentDir);
   const absComponentsDir = path.resolve(config.srcDir, config.componentsDir);
   const absOutDir = path.resolve(config.srcDir, config.outDir);
@@ -278,8 +289,8 @@ async function build(config) {
     }
   }
 
-  // Copy assets (images, css, js, etc) from repo excluding md/includes/template/components
-  await copyStaticAssets(config.srcDir, absOutDir);
+  // Copy only intentional static assets, not arbitrary files from the website root.
+  await copyStaticAssets(config, absOutDir);
 
   console.log(`Built -> ${config.outDir}/`);
 }
