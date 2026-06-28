@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import http from "node:http";
+import { Socket } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { DEFAULTS, build, buildRenderer } from "../site.js";
+import { DEFAULTS, build, buildRenderer, createPreviewApp } from "../site.js";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -69,6 +71,39 @@ async function pathExists(filePath) {
   } catch {
     return false;
   }
+}
+
+async function requestApp(app, route) {
+  const socket = new Socket();
+  const req = new http.IncomingMessage(socket);
+  req.method = "GET";
+  req.url = route;
+  req.headers = {};
+
+  const res = new http.ServerResponse(req);
+  res.assignSocket(socket);
+
+  const chunks = [];
+  res.write = (chunk, encoding, callback) => {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding));
+    if (typeof callback === "function") callback();
+    return true;
+  };
+
+  return new Promise((resolve) => {
+    res.end = (chunk, encoding, callback) => {
+      if (chunk) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding));
+      }
+      if (typeof callback === "function") callback();
+      resolve({
+        status: res.statusCode,
+        headers: res.getHeaders(),
+        body: Buffer.concat(chunks).toString("utf8"),
+      });
+    };
+    app.handle(req, res);
+  });
 }
 
 test("renders Markdown content into a templated HTML page", async () => {
@@ -274,6 +309,85 @@ test("renders nested includes inside Markdown fragments", async () => {
 
   assert.match(html, /<h2>Outer Component<\/h2>/);
   assert.match(html, /<span>Nested from Markdown<\/span>/);
+});
+
+test("build renders component Markdown as unwrapped HTML fragments", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.mkdir(path.join(srcDir, "components/nested"), { recursive: true });
+  await fs.writeFile(
+    path.join(srcDir, "components/sidebar.md"),
+    ["<aside>", "", "## Sidebar", "", "Reusable **Markdown** component.", "", "</aside>"].join("\n"),
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(srcDir, "components/nested/badge.md"),
+    ["<span class=\"badge\">", "", "**Nested** badge", "", "</span>"].join("\n"),
+    "utf8",
+  );
+
+  await build(fixtureConfig(srcDir));
+
+  const outDir = path.join(srcDir, "site-output");
+  const sidebar = await fs.readFile(path.join(outDir, "components/sidebar.html"), "utf8");
+  const badge = await fs.readFile(path.join(outDir, "components/nested/badge.html"), "utf8");
+
+  assert.match(sidebar, /<h2>Sidebar<\/h2>/);
+  assert.match(sidebar, /Reusable <strong>Markdown<\/strong> component\./);
+  assert.doesNotMatch(sidebar, /<!doctype html>|<html>|<body>|Fixture Header|<main>/);
+  assert.match(badge, /<strong>Nested<\/strong> badge/);
+});
+
+test("components can be included from content and other components", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.mkdir(path.join(srcDir, "components"), { recursive: true });
+  await fs.writeFile(
+    path.join(srcDir, "components/badge.md"),
+    "<strong>Nested component badge</strong>\n",
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(srcDir, "components/sidebar.md"),
+    ["<aside>", "## Sidebar", "<!-- include: components/badge.md -->", "</aside>"].join("\n"),
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(srcDir, "content/index.md"),
+    ["# Page", "", "<!-- include: components/sidebar.md -->"].join("\n"),
+    "utf8",
+  );
+
+  await build(fixtureConfig(srcDir));
+
+  const page = await fs.readFile(path.join(srcDir, "site-output/index.html"), "utf8");
+  const sidebar = await fs.readFile(path.join(srcDir, "site-output/components/sidebar.html"), "utf8");
+
+  assert.match(page, /<main><h1>Page<\/h1>/);
+  assert.match(page, /<aside>/);
+  assert.match(page, /<strong>Nested component badge<\/strong>/);
+  assert.match(sidebar, /<aside>/);
+  assert.match(sidebar, /<strong>Nested component badge<\/strong>/);
+  assert.doesNotMatch(sidebar, /<!doctype html>|Fixture Header|<main>/);
+});
+
+test("preview renders component routes as unwrapped HTML fragments", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.mkdir(path.join(srcDir, "components"), { recursive: true });
+  await fs.writeFile(
+    path.join(srcDir, "components/sidebar.md"),
+    ["## Preview Sidebar", "", "Preview **component** body."].join("\n"),
+    "utf8",
+  );
+
+  const app = await createPreviewApp(fixtureConfig(srcDir));
+  for (const route of ["/components/sidebar", "/components/sidebar.html", "/components/sidebar.md"]) {
+    const response = await requestApp(app, route);
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers["content-type"], /text\/html/);
+    assert.match(response.body, /<h2>Preview Sidebar<\/h2>/);
+    assert.match(response.body, /Preview <strong>component<\/strong> body\./);
+    assert.doesNotMatch(response.body, /## Preview Sidebar|<!doctype html>|Fixture Header|<main>/);
+  }
 });
 
 test("rejects cycles between two include files with a controlled error", async () => {

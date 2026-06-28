@@ -385,7 +385,7 @@ function guessSourceMdFromUrl(urlPath, config) {
   // Components route
   if (p.startsWith("/" + config.componentsDir + "/")) {
     const rel = p.slice(("/" + config.componentsDir + "/").length);
-    const mdRel = rel.endsWith(".html") ? changeExt(rel, ".md") : rel + ".md";
+    const mdRel = rel.endsWith(".html") ? changeExt(rel, ".md") : rel.endsWith(".md") ? rel : rel + ".md";
     return { kind: "component", absPath: path.resolve(config.srcDir, config.componentsDir, mdRel) };
   }
 
@@ -406,6 +406,18 @@ function guessSourceMdFromUrl(urlPath, config) {
 }
 
 async function serve(config) {
+  config = { ...DEFAULTS, ...config };
+  const absOutDir = path.resolve(config.srcDir, config.outDir);
+  const app = await createPreviewApp(config);
+
+  app.listen(Number(config.port), () => {
+    console.log(`Preview: http://localhost:${config.port}`);
+    console.log(`Pages from /${config.contentDir}, components from /${config.componentsDir}`);
+  });
+}
+
+async function createPreviewApp(config) {
+  config = { ...DEFAULTS, ...config };
   const absOutDir = path.resolve(config.srcDir, config.outDir);
   const { renderPageFromFile } = await buildRenderer(config);
 
@@ -413,6 +425,35 @@ async function serve(config) {
 
   // Serve built assets if present, plus any static files in repo (css/js/images)
   app.use("/" + config.outDir, express.static(absOutDir));
+
+  app.get("/" + config.componentsDir + "/*", async (req, res) => {
+    try {
+      const { absPath } = guessSourceMdFromUrl(req.path, config);
+
+      if (!fssync.existsSync(absPath)) {
+        res.status(404).type("text/html").send(`<h1>404</h1><p>Not found: ${escapeHtml(req.path)}</p>`);
+        return;
+      }
+
+      const { html } = await renderPageFromFile(absPath, false);
+
+      const etag = crypto.createHash("sha1").update(html).digest("hex");
+      if (req.headers["if-none-match"] === etag) {
+        res.status(304).end();
+        return;
+      }
+
+      res.setHeader("ETag", etag);
+      res.setHeader("Cache-Control", "no-store");
+      res.type("text/html").send(html);
+    } catch (e) {
+      if (e instanceof IncludeError) {
+        res.status(500).type("text/plain").send(e.message);
+        return;
+      }
+      res.status(500).type("text/plain").send(String(e?.stack || e));
+    }
+  });
 
   // Serve static assets directly from src (so you don't need a build for CSS tweaks)
   app.use(express.static(config.srcDir, {
@@ -455,10 +496,7 @@ async function serve(config) {
     }
   });
 
-  app.listen(Number(config.port), () => {
-    console.log(`Preview: http://localhost:${config.port}`);
-    console.log(`Pages from /${config.contentDir}, components from /${config.componentsDir}`);
-  });
+  return app;
 }
 
 async function main() {
@@ -497,6 +535,7 @@ export {
   DEFAULTS,
   build,
   buildRenderer,
+  createPreviewApp,
   deriveTitle,
   guessSourceMdFromUrl,
   parseArgs,

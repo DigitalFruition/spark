@@ -129,7 +129,21 @@ dist/components/sidebar.html
 
 Component output is **not wrapped** in the site template.
 
-This allows components to be reused independently.
+Nested component paths are preserved:
+
+```text
+components/cards/callout.md
+```
+
+becomes:
+
+```text
+dist/components/cards/callout.html
+```
+
+Components may include files from `includes/` or other Markdown components, and pages, templates, and other components may include them using the standard include syntax.
+
+This allows components to be reused independently and previewed directly.
 
 ---
 
@@ -226,6 +240,8 @@ Markdown components may also be included:
 <!-- include: components/sidebar.md -->
 ```
 
+The same include syntax works in `template.html`, Markdown pages under `content/`, HTML fragments under `includes/`, and Markdown components under `components/`.
+
 Include targets must be relative paths under one of these project source directories:
 
 ```text
@@ -289,6 +305,24 @@ content/docs/getting-started.md
 → /docs/getting-started.html
 ```
 
+## Component Mapping
+
+```text
+components/sidebar.md
+→ /components/sidebar.html
+```
+
+```text
+components/cards/callout.md
+→ /components/cards/callout.html
+```
+
+Component preview routes render the same unwrapped HTML fragments as static build output. The preview server also accepts extensionless component routes such as:
+
+```text
+/components/sidebar
+```
+
 Future enhancements may support directory-style URLs:
 
 ```text
@@ -320,6 +354,7 @@ http://localhost:3000
 Features:
 
 * Render pages on demand
+* Render component routes as unwrapped HTML fragments
 * No build step required
 * Supports includes
 * Supports Markdown rendering
