@@ -393,7 +393,7 @@ npm run serve
 Default URL:
 
 ```text
-http://localhost:3000
+http://127.0.0.1:3000
 ```
 
 Features:
@@ -404,6 +404,8 @@ Features:
 * Supports includes
 * Supports Markdown rendering
 * Suitable for local development
+
+The preview server binds to `127.0.0.1` by default. Use `--host 0.0.0.0` only when you intentionally need access from another device or container.
 
 ---
 
@@ -424,6 +426,55 @@ dist/
 All Markdown files are rendered and written to disk.
 
 This mode is intended for CI/CD pipelines.
+
+---
+
+# Command Line
+
+Show CLI usage:
+
+```bash
+node site.js --help
+```
+
+The primary project commands remain:
+
+```bash
+npm run build
+npm run serve
+```
+
+Supported build flags:
+
+```text
+--out dist
+--content content
+--components components
+--includes includes
+--template template.html
+```
+
+Supported preview flags:
+
+```text
+--port 3000
+--host 127.0.0.1
+--content content
+--components components
+--includes includes
+--template template.html
+```
+
+Once the package binary name is finalized, independent website repositories should call the package binary from their npm scripts instead of referencing this repository's `site.js` file directly. For example:
+
+```json
+{
+  "scripts": {
+    "build": "md-site build",
+    "serve": "md-site serve --port 3000"
+  }
+}
+```
 
 ---
 

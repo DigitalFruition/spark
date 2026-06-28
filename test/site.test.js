@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import http from "node:http";
 import { Socket } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import { DEFAULTS, build, buildRenderer, createPreviewApp, startPreviewServer } from "../site.js";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
+const execFileAsync = promisify(execFile);
+const sitePath = path.resolve(testDir, "../site.js");
 
 async function createFixtureWebsite() {
   const srcDir = await fs.mkdtemp(path.join(os.tmpdir(), "md-site-test-"));
@@ -142,6 +146,66 @@ async function closeServer(server) {
     });
   });
 }
+
+async function runCli(args, options = {}) {
+  try {
+    const { stdout, stderr } = await execFileAsync(process.execPath, [sitePath, ...args], {
+      cwd: options.cwd,
+    });
+    return { code: 0, stdout, stderr };
+  } catch (e) {
+    return {
+      code: e.code,
+      stdout: e.stdout ?? "",
+      stderr: e.stderr ?? "",
+    };
+  }
+}
+
+test("cli help prints usage", async () => {
+  const result = await runCli(["--help"]);
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /Usage:/);
+  assert.match(result.stdout, /node site\.js build/);
+  assert.match(result.stdout, /node site\.js serve/);
+  assert.match(result.stdout, /npm run build/);
+  assert.match(result.stdout, /--host <host>/);
+  assert.equal(result.stderr, "");
+});
+
+test("cli unknown commands print usage and exit non-zero", async () => {
+  const result = await runCli(["wat"]);
+
+  assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /Unknown command: wat/);
+  assert.match(result.stderr, /Usage:/);
+  assert.match(result.stderr, /node site\.js --help/);
+});
+
+test("cli build reports invalid configured directories clearly", async () => {
+  const srcDir = await createFixtureWebsite();
+  const result = await runCli(["build", "--content", "missing"], { cwd: srcDir });
+
+  assert.notEqual(result.code, 0);
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /content directory not found: missing/);
+  assert.doesNotMatch(result.stderr, /ENOENT|Error:/);
+});
+
+test("cli reports missing option values clearly", async () => {
+  const missingPort = await runCli(["serve", "--port"]);
+
+  assert.notEqual(missingPort.code, 0);
+  assert.equal(missingPort.stdout, "");
+  assert.match(missingPort.stderr, /--port requires a value/);
+
+  const missingContent = await runCli(["build", "--content"]);
+
+  assert.notEqual(missingContent.code, 0);
+  assert.equal(missingContent.stdout, "");
+  assert.match(missingContent.stderr, /--content requires a value/);
+});
 
 test("renders Markdown content into a templated HTML page", async () => {
   const srcDir = await createFixtureWebsite();
@@ -545,6 +609,11 @@ test("preview server serves an isolated fixture project over an ephemeral port",
   const server = await startPreviewServer(fixtureConfig(srcDir, { port: 0 }));
 
   try {
+    const address = server.address();
+    assert.equal(typeof address, "object");
+    assert.ok(address);
+    assert.equal(address.address, "127.0.0.1");
+
     const home = await requestServer(server, "/");
     assert.equal(home.status, 200);
     assert.match(home.headers["content-type"], /text\/html/);

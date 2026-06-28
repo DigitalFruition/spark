@@ -18,6 +18,8 @@ const md = new MarkdownIt({
 const ASSETS_DIR = "assets";
 const ROOT_STATIC_FILES = ["favicon.ico", "robots.txt"];
 const DEFAULT_INCLUDE_DIRS = ["includes", "components"];
+const VALUE_FLAGS = new Set(["content", "components", "includes", "template", "out", "port", "host"]);
+const BOOLEAN_FLAGS = new Set(["help"]);
 
 const DEFAULTS = {
   srcDir: process.cwd(),
@@ -27,6 +29,7 @@ const DEFAULTS = {
   templateFile: "template.html",
   outDir: "dist",
   port: 3000,
+  host: "127.0.0.1",
 };
 
 /**
@@ -38,15 +41,59 @@ function parseArgs(argv) {
   const args = { _: [] };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
+    if (a === "-h") {
+      args.help = true;
+      continue;
+    }
     if (a.startsWith("--")) {
       const k = a.slice(2);
-      const v = argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[++i] : true;
+      if (BOOLEAN_FLAGS.has(k)) {
+        args[k] = true;
+        continue;
+      }
+      if (!VALUE_FLAGS.has(k)) {
+        throw new ConfigError(`unknown option: --${k}`);
+      }
+      const v = argv[i + 1];
+      if (v === undefined || v.startsWith("-")) {
+        throw new ConfigError(`--${k} requires a value`);
+      }
       args[k] = v;
+      i++;
     } else {
       args._.push(a);
     }
   }
   return args;
+}
+
+function cliName(argv = process.argv) {
+  const command = path.basename(argv[1] ?? "site.js");
+  if (path.basename(argv[0] ?? "") === "node") {
+    return `node ${command}`;
+  }
+  return command;
+}
+
+function usage(commandName = cliName()) {
+  return `Usage:
+  ${commandName} --help
+  ${commandName} build [--out dist] [--content content] [--components components] [--includes includes] [--template template.html]
+  ${commandName} serve [--port 3000] [--host 127.0.0.1] [--content content] [--components components] [--includes includes] [--template template.html]
+
+Primary npm scripts:
+  npm run build
+  npm run serve
+
+Options:
+  --content <dir>      Markdown page source directory. Default: content
+  --components <dir>   Markdown component source directory. Default: components
+  --includes <dir>     Include fragment source directory. Default: includes
+  --template <file>    HTML template file. Default: template.html
+  --out <dir>          Static build output directory. Default: dist
+  --port <number>      Preview server port. Default: 3000
+  --host <host>        Preview server host. Default: 127.0.0.1
+`;
 }
 
 function toPosix(p) {
@@ -65,6 +112,64 @@ class IncludeError extends Error {
     this.name = "IncludeError";
     this.code = code;
     this.includeRef = includeRef;
+  }
+}
+
+class ConfigError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ConfigError";
+  }
+}
+
+function displayPath(filePath, srcRoot) {
+  const rel = path.relative(srcRoot, filePath);
+  if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) {
+    return toPosix(rel);
+  }
+  return toPosix(filePath);
+}
+
+async function assertDirectory(label, dirPath, srcRoot) {
+  let stat;
+  try {
+    stat = await fs.stat(dirPath);
+  } catch (e) {
+    if (e?.code === "ENOENT") {
+      throw new ConfigError(`${label} directory not found: ${displayPath(dirPath, srcRoot)}`);
+    }
+    throw e;
+  }
+
+  if (!stat.isDirectory()) {
+    throw new ConfigError(`${label} is not a directory: ${displayPath(dirPath, srcRoot)}`);
+  }
+}
+
+async function assertOptionalDirectory(label, dirPath, srcRoot) {
+  if (!fssync.existsSync(dirPath)) return;
+  await assertDirectory(label, dirPath, srcRoot);
+}
+
+async function assertFile(label, filePath, srcRoot) {
+  let stat;
+  try {
+    stat = await fs.stat(filePath);
+  } catch (e) {
+    if (e?.code === "ENOENT") {
+      throw new ConfigError(`${label} file not found: ${displayPath(filePath, srcRoot)}`);
+    }
+    throw e;
+  }
+
+  if (!stat.isFile()) {
+    throw new ConfigError(`${label} is not a file: ${displayPath(filePath, srcRoot)}`);
+  }
+}
+
+function validatePort(port) {
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new ConfigError(`port must be an integer from 0 to 65535: ${port}`);
   }
 }
 
@@ -229,6 +334,11 @@ async function buildRenderer(config) {
   config = { ...DEFAULTS, ...config };
   const cache = new Map(); // include cache etc.
   const srcRoot = config.srcDir;
+  const templatePath = path.resolve(config.srcDir, config.templateFile);
+
+  await assertFile("template", templatePath, config.srcDir);
+  await assertOptionalDirectory("includes", path.resolve(config.srcDir, config.includesDir), config.srcDir);
+  await assertOptionalDirectory("components", path.resolve(config.srcDir, config.componentsDir), config.srcDir);
 
   const ctxBase = {
     srcRoot,
@@ -253,7 +363,6 @@ async function buildRenderer(config) {
     return renderIncludes(bodyHtml, { ...ctxBase, visited: new Set() });
   };
 
-  const templatePath = path.resolve(config.srcDir, config.templateFile);
   const templateHtml = await loadTemplate(templatePath, ctxBase);
 
   async function renderPageFromFile(absMdPath, wrapInTemplate) {
@@ -334,6 +443,8 @@ async function build(config) {
   const absComponentsDir = path.resolve(config.srcDir, config.componentsDir);
   const absOutDir = path.resolve(config.srcDir, config.outDir);
 
+  await assertDirectory("content", absContentDir, config.srcDir);
+
   await fs.rm(absOutDir, { recursive: true, force: true });
   await ensureDir(absOutDir);
 
@@ -407,10 +518,11 @@ function guessSourceMdFromUrl(urlPath, config) {
 
 async function startPreviewServer(config) {
   config = { ...DEFAULTS, ...config };
+  validatePort(Number(config.port));
   const app = await createPreviewApp(config);
 
   return new Promise((resolve, reject) => {
-    const server = app.listen(Number(config.port));
+    const server = app.listen(Number(config.port), config.host);
     const onError = (err) => reject(err);
     server.once("error", onError);
     server.once("listening", () => {
@@ -425,8 +537,10 @@ async function serve(config) {
   const server = await startPreviewServer(config);
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : config.port;
+  const host = typeof address === "object" && address ? address.address : config.host;
+  const urlHost = host.includes(":") ? `[${host}]` : host;
 
-  console.log(`Preview: http://localhost:${port}`);
+  console.log(`Preview: http://${urlHost}:${port}`);
   console.log(`Pages from /${config.contentDir}, components from /${config.componentsDir}`);
 
   return server;
@@ -435,6 +549,7 @@ async function serve(config) {
 async function createPreviewApp(config) {
   config = { ...DEFAULTS, ...config };
   const absOutDir = path.resolve(config.srcDir, config.outDir);
+  await assertDirectory("content", path.resolve(config.srcDir, config.contentDir), config.srcDir);
   const { renderPageFromFile } = await buildRenderer(config);
 
   const app = express();
@@ -517,7 +632,24 @@ async function createPreviewApp(config) {
 
 async function main() {
   const args = parseArgs(process.argv);
+  const commandName = cliName(process.argv);
   const cmd = args._[0] || "build";
+
+  if (args.help) {
+    console.log(usage(commandName));
+    return;
+  }
+
+  if (cmd !== "build" && cmd !== "serve") {
+    console.error(`Unknown command: ${cmd}`);
+    console.error(usage(commandName));
+    process.exit(1);
+  }
+
+  const port = Number(args.port ?? DEFAULTS.port);
+  if (cmd === "serve" || args.port !== undefined) {
+    validatePort(port);
+  }
 
   const config = {
     ...DEFAULTS,
@@ -527,7 +659,8 @@ async function main() {
     componentsDir: String(args.components ?? DEFAULTS.componentsDir),
     templateFile: String(args.template ?? DEFAULTS.templateFile),
     outDir: String(args.out ?? DEFAULTS.outDir),
-    port: Number(args.port ?? DEFAULTS.port),
+    port,
+    host: String(args.host ?? DEFAULTS.host),
   };
 
   if (cmd === "build") {
@@ -539,31 +672,28 @@ async function main() {
     return;
   }
 
-  console.error(`Unknown command: ${cmd}`);
-  console.error(`Usage:
-  node site.js build [--out dist] [--content content] [--components components] [--includes includes] [--template template.html]
-  node site.js serve [--port 3000]
-`);
-  process.exit(1);
 }
 
 export {
   DEFAULTS,
   build,
   buildRenderer,
+  cliName,
   createPreviewApp,
   deriveTitle,
   guessSourceMdFromUrl,
+  main,
   parseArgs,
   renderMarkdownToHtml,
   serve,
   startPreviewServer,
+  usage,
 };
 
 // Run the CLI only when this file is executed directly, not when imported by tests.
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   main().catch((e) => {
-    console.error(e instanceof IncludeError ? e.message : e);
+    console.error(e instanceof IncludeError || e instanceof ConfigError ? e.message : e);
     process.exit(1);
   });
 }

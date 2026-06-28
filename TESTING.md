@@ -58,6 +58,56 @@ The fixture output directory is named `site-output` inside the temporary website
 
 ## Current Test Cases
 
+### `cli help prints usage`
+
+This test runs the CLI in a subprocess with `--help`.
+
+It verifies:
+
+* The command exits successfully.
+* Usage text is printed to stdout.
+* Build and serve commands are documented.
+* Primary npm scripts are shown.
+* The preview host flag is documented.
+
+This protects the help path used by developers and the future package binary entrypoint.
+
+### `cli unknown commands print usage and exit non-zero`
+
+This test runs the CLI in a subprocess with an unsupported command.
+
+It verifies:
+
+* The command exits non-zero.
+* The unknown command is identified.
+* Usage text is printed to stderr.
+
+This protects CLI failure behavior for typos and unsupported commands.
+
+### `cli build reports invalid configured directories clearly`
+
+This test runs the CLI build command against an isolated fixture with an invalid configured content directory.
+
+It verifies:
+
+* The command exits non-zero.
+* The diagnostic names the invalid directory.
+* The diagnostic avoids raw filesystem exception output.
+
+This protects build configuration failures from leaking low-level stack traces in normal CLI usage.
+
+### `cli reports missing option values clearly`
+
+This test runs the CLI with documented value-taking flags that do not provide values.
+
+It verifies:
+
+* Missing `--port` values exit non-zero with a clear diagnostic.
+* Missing `--content` values exit non-zero with a clear diagnostic.
+* Missing option values are not coerced to boolean configuration values.
+
+This protects CLI parsing from treating incomplete options as valid settings.
+
 ### `renders Markdown content into a templated HTML page`
 
 This test builds a renderer against an isolated temporary website directory and renders `content/index.md` through the fixture template.
@@ -257,6 +307,7 @@ This test starts the preview server on an operating-system-assigned ephemeral po
 It verifies:
 
 * The server can listen against an isolated temporary website directory outside the generator package source tree.
+* The default preview server host is loopback-only.
 * The server shuts down cleanly after the test.
 * `/` renders `content/index.md`.
 * A known extensionless page route renders templated HTML.
