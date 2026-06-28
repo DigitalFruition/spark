@@ -288,7 +288,42 @@ Frontmatter is metadata only and is not rendered into the page body.
 
 # URL Mapping
 
-## Page Mapping
+## Page Output Mapping
+
+Static build mode writes Markdown pages under `content/` to matching `.html` files under `dist/`.
+
+```text
+content/index.md
+→ dist/index.html
+```
+
+```text
+content/about.md
+→ dist/about.html
+```
+
+```text
+content/docs/getting-started.md
+→ dist/docs/getting-started.html
+```
+
+Directory-style build output is not part of v1.0.0. A source file such as:
+
+```text
+content/docs/getting-started.md
+```
+
+does not generate:
+
+```text
+dist/docs/getting-started/index.html
+```
+
+Future enhancements may add directory-style output, canonical URL generation, or redirects.
+
+## Page Preview Mapping
+
+Live preview mode accepts classic `.html` page URLs and extensionless aliases:
 
 ```text
 content/index.md
@@ -297,13 +332,35 @@ content/index.md
 
 ```text
 content/about.md
+→ /about
 → /about.html
 ```
 
 ```text
 content/docs/getting-started.md
+→ /docs/getting-started
 → /docs/getting-started.html
 ```
+
+Preview does not alias a leaf Markdown file to a trailing-slash route. For example, this source file:
+
+```text
+content/docs/getting-started.md
+```
+
+is not served from:
+
+```text
+/docs/getting-started/
+```
+
+That route is reserved for an actual directory index source such as:
+
+```text
+content/docs/getting-started/index.md
+```
+
+This keeps v1.0.0 preview behavior aligned with classic `.html` build output instead of implying directory-style output that the build does not generate.
 
 ## Component Mapping
 
@@ -321,18 +378,6 @@ Component preview routes render the same unwrapped HTML fragments as static buil
 
 ```text
 /components/sidebar
-```
-
-Future enhancements may support directory-style URLs:
-
-```text
-/docs/getting-started/
-```
-
-via:
-
-```text
-dist/docs/getting-started/index.html
 ```
 
 ---

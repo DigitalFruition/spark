@@ -214,6 +214,42 @@ It verifies:
 
 This protects preview behavior so it matches static component build output.
 
+### `build maps content Markdown files to classic HTML output paths`
+
+This test runs the static build against root, top-level, and nested Markdown pages.
+
+It verifies:
+
+* `content/index.md` builds to `dist/index.html`.
+* `content/about.md` builds to `dist/about.html`.
+* `content/docs/getting-started.md` builds to `dist/docs/getting-started.html`.
+* Leaf Markdown files do not generate directory-style `index.html` output.
+
+This protects v1.0.0 static output from accidental directory-style URL changes.
+
+### `preview maps root, extensionless, and html page routes consistently`
+
+This test drives the preview Express app in-process without opening a network port.
+
+It verifies:
+
+* `/` renders `content/index.md`.
+* `/about` and `/about.html` render the same page.
+* `/docs/getting-started` and `/docs/getting-started.html` render the same nested page.
+
+This protects the documented preview aliases for classic `.html` output paths.
+
+### `preview returns 404 for missing pages and unsupported leaf trailing slash aliases`
+
+This test drives the preview Express app in-process without opening a network port.
+
+It verifies:
+
+* Missing preview routes return `404`.
+* A trailing-slash route such as `/docs/getting-started/` does not alias to `content/docs/getting-started.md`.
+
+This documents the v1.0.0 design decision to keep leaf trailing-slash routes post-1.0 unless directory-style output is added intentionally.
+
 ### `rejects cycles between two include files with a controlled error`
 
 This test runs the static build against two include files that include each other.
