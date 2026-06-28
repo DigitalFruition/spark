@@ -85,6 +85,62 @@ It verifies:
 
 This protects reusable Markdown components from regressions in include validation.
 
+### `renders one-level HTML includes`
+
+This test renders a page with a direct HTML include from `includes/`.
+
+It verifies:
+
+* One-level include resolution works for HTML fragments.
+* Valid include rendering is independent of the template include path.
+
+This protects the most direct reusable HTML fragment workflow.
+
+### `renders two-level nested HTML includes`
+
+This test renders a page with an HTML include that includes another HTML fragment.
+
+It verifies:
+
+* HTML includes may include nested HTML fragments.
+* Nested output preserves surrounding outer-fragment content.
+
+This protects recursive HTML include rendering.
+
+### `renders Markdown includes nested inside HTML includes`
+
+This test renders a page with an HTML include that includes a Markdown component.
+
+It verifies:
+
+* HTML includes may include Markdown fragments.
+* Nested Markdown fragments are rendered to HTML before insertion.
+
+This protects mixed HTML and Markdown recursive include rendering.
+
+### `renders nested includes inside Markdown fragments`
+
+This test renders a page with a Markdown component that includes another fragment.
+
+It verifies:
+
+* Markdown fragments may contain nested include comments.
+* Nested fragments are resolved after Markdown rendering.
+
+This protects recursive include behavior inside reusable Markdown components.
+
+### `rejects cycles between two include files with a controlled error`
+
+This test runs the static build against two include files that include each other.
+
+It verifies:
+
+* Include cycles fail rendering deterministically.
+* The failure is reported as an `IncludeError`.
+* The diagnostic identifies the include reference without exposing the fixture source directory path.
+
+This protects build and preview behavior from silently generating partial output for recursive include cycles.
+
 ### `rejects missing includes with a controlled error`
 
 This test runs the static build against a page that references a missing include.
