@@ -62,6 +62,15 @@ function fixtureConfig(srcDir, overrides = {}) {
   };
 }
 
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 test("renders Markdown content into a templated HTML page", async () => {
   const srcDir = await createFixtureWebsite();
   const { renderPageFromFile } = await buildRenderer(fixtureConfig(srcDir));
@@ -89,4 +98,103 @@ test("build writes output from an isolated website directory", async () => {
 
   const repoDist = path.resolve(testDir, "../dist");
   assert.notEqual(path.resolve(srcDir, "site-output"), repoDist);
+});
+
+test("build output contains only deployable generated files", async () => {
+  const srcDir = await createFixtureWebsite();
+
+  await fs.writeFile(path.join(srcDir, "site.js"), "console.log('source');\n", "utf8");
+  await fs.writeFile(path.join(srcDir, "package.json"), "{}\n", "utf8");
+  await fs.writeFile(path.join(srcDir, "package-lock.json"), "{}\n", "utf8");
+
+  await fs.mkdir(path.join(srcDir, ".git"), { recursive: true });
+  await fs.writeFile(path.join(srcDir, ".git/config"), "[core]\n", "utf8");
+
+  await fs.mkdir(path.join(srcDir, "node_modules/example-package"), { recursive: true });
+  await fs.writeFile(
+    path.join(srcDir, "node_modules/example-package/index.js"),
+    "export default true;\n",
+    "utf8",
+  );
+
+  await fs.mkdir(path.join(srcDir, "_Project"), { recursive: true });
+  await fs.writeFile(path.join(srcDir, "_Project/plan.txt"), "local planning\n", "utf8");
+
+  await fs.mkdir(path.join(srcDir, "site-output"), { recursive: true });
+  await fs.writeFile(path.join(srcDir, "site-output/stale.html"), "stale build\n", "utf8");
+
+  await build(fixtureConfig(srcDir));
+
+  const outDir = path.join(srcDir, "site-output");
+  const rendered = await fs.readFile(path.join(outDir, "index.html"), "utf8");
+  assert.match(rendered, /Hello <strong>fixture<\/strong> page\./);
+  assert.equal(await pathExists(path.join(outDir, "stale.html")), false);
+
+  const blockedOutputs = [
+    "site.js",
+    "package.json",
+    "package-lock.json",
+    ".git/config",
+    "node_modules/example-package/index.js",
+    "site-output/index.html",
+    "site-output/stale.html",
+    "_Project/plan.txt",
+  ];
+
+  const copiedBlockedOutputs = [];
+  for (const rel of blockedOutputs) {
+    if (await pathExists(path.join(outDir, rel))) {
+      copiedBlockedOutputs.push(rel);
+    }
+  }
+
+  assert.deepEqual(copiedBlockedOutputs, []);
+});
+
+test("ignores custom assetsDir and uses the fixed assets convention", async () => {
+  const srcDir = await createFixtureWebsite();
+  const externalAssetsDir = await fs.mkdtemp(path.join(os.tmpdir(), "md-site-shared-assets-"));
+  await fs.writeFile(path.join(externalAssetsDir, "leaked.txt"), "outside asset\n", "utf8");
+
+  const escapingAssetsDir = path.relative(srcDir, externalAssetsDir);
+  await build(fixtureConfig(srcDir, { assetsDir: escapingAssetsDir }));
+
+  const outDir = path.join(srcDir, "site-output");
+  assert.match(
+    await fs.readFile(path.join(outDir, "index.html"), "utf8"),
+    /Hello <strong>fixture<\/strong> page\./,
+  );
+  assert.equal(await pathExists(path.join(outDir, "assets/leaked.txt")), false);
+  assert.equal(
+    await pathExists(path.join(srcDir, path.basename(externalAssetsDir), "leaked.txt")),
+    false,
+  );
+});
+
+test("copies approved static assets from the asset convention", async () => {
+  const srcDir = await createFixtureWebsite();
+
+  await fs.mkdir(path.join(srcDir, "assets/css"), { recursive: true });
+  await fs.mkdir(path.join(srcDir, "assets/images/icons"), { recursive: true });
+  await fs.writeFile(path.join(srcDir, "assets/css/site.css"), "body { color: #222; }\n", "utf8");
+  await fs.writeFile(path.join(srcDir, "assets/images/icons/logo.svg"), "<svg></svg>\n", "utf8");
+  await fs.writeFile(path.join(srcDir, "favicon.ico"), "icon\n", "utf8");
+  await fs.writeFile(path.join(srcDir, "robots.txt"), "User-agent: *\nDisallow:\n", "utf8");
+
+  await build(fixtureConfig(srcDir));
+
+  const outDir = path.join(srcDir, "site-output");
+  assert.equal(
+    await fs.readFile(path.join(outDir, "assets/css/site.css"), "utf8"),
+    "body { color: #222; }\n",
+  );
+  assert.equal(
+    await fs.readFile(path.join(outDir, "assets/images/icons/logo.svg"), "utf8"),
+    "<svg></svg>\n",
+  );
+  assert.equal(await fs.readFile(path.join(outDir, "favicon.ico"), "utf8"), "icon\n");
+  assert.equal(
+    await fs.readFile(path.join(outDir, "robots.txt"), "utf8"),
+    "User-agent: *\nDisallow:\n",
+  );
 });

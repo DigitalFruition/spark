@@ -361,18 +361,38 @@ See `TESTING.MD` for the current test cases, fixture strategy, and CI reporting 
 
 # Asset Handling
 
-Non-Markdown files are copied directly into the output directory.
-
-Examples:
+Intentional static assets belong under:
 
 ```text
-images/logo.png
-css/site.css
-js/site.js
-favicon.ico
+assets/
 ```
 
-These assets preserve their directory structure.
+During static builds, files in `assets/` are copied to:
+
+```text
+dist/assets/
+```
+
+Nested asset paths are preserved. For example:
+
+```text
+assets/images/logo.png
+```
+
+becomes:
+
+```text
+dist/assets/images/logo.png
+```
+
+The build also copies approved root static files when present:
+
+```text
+favicon.ico
+robots.txt
+```
+
+Project source files, package metadata, dependencies, local planning files, and previous build output are not copied into `dist/`.
 
 ---
 
