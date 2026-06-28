@@ -73,6 +73,52 @@ It verifies:
 
 This protects the basic page rendering path used by both preview and static build flows.
 
+### `uses frontmatter title and omits frontmatter from page body`
+
+This test renders a page with YAML frontmatter and body content.
+
+It verifies:
+
+* Frontmatter `title` is used as the page title.
+* `{{title}}` is populated from frontmatter.
+* Frontmatter delimiters and metadata are not rendered into the page body.
+
+This protects the primary v1.0.0 title convention and frontmatter stripping behavior.
+
+### `uses first Markdown H1 when frontmatter title is absent`
+
+This test renders a page without frontmatter and with multiple H1 headings.
+
+It verifies:
+
+* The first Markdown H1 is used as the page title.
+* Later headings do not override the derived title.
+
+This protects the first title fallback path.
+
+### `uses filename stem when no frontmatter title or H1 exists`
+
+This test renders a page without frontmatter or H1 content.
+
+It verifies:
+
+* The Markdown filename stem is used as the page title.
+* The fallback title is inserted into `{{title}}`.
+
+This protects the final title fallback path.
+
+### `escapes HTML in titles inserted into templates`
+
+This test renders a page with HTML-like text in the frontmatter title.
+
+It verifies:
+
+* The raw derived title remains available to renderer callers.
+* The title is HTML-escaped when inserted into the template.
+* Raw title HTML is not emitted inside the `<title>` element.
+
+This protects templates from treating title metadata as trusted HTML.
+
 ### `renders valid Markdown includes from approved component directory`
 
 This test renders a page that includes a Markdown component from `components/`.

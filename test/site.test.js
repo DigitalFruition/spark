@@ -88,6 +88,73 @@ test("renders Markdown content into a templated HTML page", async () => {
   assert.doesNotMatch(html, /{{body}}|{{title}}/);
 });
 
+test("uses frontmatter title and omits frontmatter from page body", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(
+    path.join(srcDir, "content/index.md"),
+    ["---", "title: Frontmatter Title", "---", "", "# Body Heading", "", "Page body."].join("\n"),
+    "utf8",
+  );
+
+  const { renderPageFromFile } = await buildRenderer(fixtureConfig(srcDir));
+  const { html, title } = await renderPageFromFile(path.join(srcDir, "content/index.md"), true);
+
+  assert.equal(title, "Frontmatter Title");
+  assert.match(html, /<title>Frontmatter Title<\/title>/);
+  assert.match(html, /<h1>Body Heading<\/h1>/);
+  assert.doesNotMatch(html, /title: Frontmatter Title/);
+  assert.doesNotMatch(html, /---/);
+});
+
+test("uses first Markdown H1 when frontmatter title is absent", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(
+    path.join(srcDir, "content/index.md"),
+    ["# Heading Title", "", "# Later Heading", "", "Page body."].join("\n"),
+    "utf8",
+  );
+
+  const { renderPageFromFile } = await buildRenderer(fixtureConfig(srcDir));
+  const { html, title } = await renderPageFromFile(path.join(srcDir, "content/index.md"), true);
+
+  assert.equal(title, "Heading Title");
+  assert.match(html, /<title>Heading Title<\/title>/);
+});
+
+test("uses filename stem when no frontmatter title or H1 exists", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(
+    path.join(srcDir, "content/plain-page.md"),
+    "Plain page body without a heading.\n",
+    "utf8",
+  );
+
+  const { renderPageFromFile } = await buildRenderer(fixtureConfig(srcDir));
+  const { html, title } = await renderPageFromFile(path.join(srcDir, "content/plain-page.md"), true);
+
+  assert.equal(title, "plain-page");
+  assert.match(html, /<title>plain-page<\/title>/);
+});
+
+test("escapes HTML in titles inserted into templates", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(
+    path.join(srcDir, "content/index.md"),
+    ["---", "title: \"<script>alert('x')</script> & Site\"", "---", "", "Page body."].join("\n"),
+    "utf8",
+  );
+
+  const { renderPageFromFile } = await buildRenderer(fixtureConfig(srcDir));
+  const { html, title } = await renderPageFromFile(path.join(srcDir, "content/index.md"), true);
+
+  assert.equal(title, "<script>alert('x')</script> & Site");
+  assert.match(
+    html,
+    /<title>&lt;script&gt;alert\(&#39;x&#39;\)&lt;\/script&gt; &amp; Site<\/title>/,
+  );
+  assert.doesNotMatch(html, /<title><script>/);
+});
+
 test("renders valid Markdown includes from approved component directory", async () => {
   const srcDir = await createFixtureWebsite();
   await fs.mkdir(path.join(srcDir, "components"), { recursive: true });
