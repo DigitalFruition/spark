@@ -250,6 +250,23 @@ It verifies:
 
 This documents the v1.0.0 design decision to keep leaf trailing-slash routes post-1.0 unless directory-style output is added intentionally.
 
+### `preview server serves an isolated fixture project over an ephemeral port`
+
+This test starts the preview server on an operating-system-assigned ephemeral port and sends real HTTP requests to it.
+
+It verifies:
+
+* The server can listen against an isolated temporary website directory outside the generator package source tree.
+* The server shuts down cleanly after the test.
+* `/` renders `content/index.md`.
+* A known extensionless page route renders templated HTML.
+* A component route renders unwrapped component HTML.
+* A static asset under `assets/` is served directly.
+* A missing page returns `404`.
+* Include render errors return `500` with a predictable diagnostic that does not expose the fixture source directory path.
+
+This protects the CLI preview-server path from regressions that in-process Express app tests cannot catch.
+
 ### `rejects cycles between two include files with a controlled error`
 
 This test runs the static build against two include files that include each other.
