@@ -175,6 +175,45 @@ It verifies:
 
 This protects recursive include behavior inside reusable Markdown components.
 
+### `build renders component Markdown as unwrapped HTML fragments`
+
+This test runs the static build against a fixture with top-level and nested Markdown components.
+
+It verifies:
+
+* Component Markdown files are written under `dist/components/`.
+* Nested component paths are preserved.
+* Component output contains rendered Markdown.
+* Component output is not wrapped in the full page template.
+
+This protects component build output from regressing into page rendering behavior.
+
+### `components can be included from content and other components`
+
+This test runs the static build against a page that includes a Markdown component which includes another Markdown component.
+
+It verifies:
+
+* Pages under `content/` can include Markdown components.
+* Markdown components can include other Markdown components.
+* Built component output resolves nested includes.
+* Built component output remains unwrapped.
+
+This protects the reusable fragment workflow for pages and nested components.
+
+### `preview renders component routes as unwrapped HTML fragments`
+
+This test drives the preview Express app in-process without opening a network port.
+
+It verifies:
+
+* Extensionless component preview routes render successfully.
+* `.html` component preview routes render successfully.
+* `.md` component preview routes render through the component renderer instead of returning raw Markdown.
+* Previewed component output is not wrapped in the full page template.
+
+This protects preview behavior so it matches static component build output.
+
 ### `rejects cycles between two include files with a controlled error`
 
 This test runs the static build against two include files that include each other.
