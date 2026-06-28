@@ -88,6 +88,109 @@ test("renders Markdown content into a templated HTML page", async () => {
   assert.doesNotMatch(html, /{{body}}|{{title}}/);
 });
 
+test("renders valid Markdown includes from approved component directory", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.mkdir(path.join(srcDir, "components"), { recursive: true });
+  await fs.writeFile(
+    path.join(srcDir, "components/sidebar.md"),
+    ["<aside>", "", "## Sidebar", "", "Reusable **Markdown** component.", "", "</aside>"].join("\n"),
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(srcDir, "content/index.md"),
+    ["# Page", "", "<!-- include: components/sidebar.md -->"].join("\n"),
+    "utf8",
+  );
+
+  const { renderPageFromFile } = await buildRenderer(fixtureConfig(srcDir));
+  const { html } = await renderPageFromFile(path.join(srcDir, "content/index.md"), true);
+
+  assert.match(html, /<aside>/);
+  assert.match(html, /<h2>Sidebar<\/h2>/);
+  assert.match(html, /Reusable <strong>Markdown<\/strong> component\./);
+});
+
+test("rejects missing includes with a controlled error", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(
+    path.join(srcDir, "content/index.md"),
+    ["# Page", "", "<!-- include: includes/missing.html -->"].join("\n"),
+    "utf8",
+  );
+
+  await assert.rejects(
+    () => build(fixtureConfig(srcDir)),
+    (err) => {
+      assert.equal(err.name, "IncludeError");
+      assert.equal(err.code, "missing");
+      assert.equal(err.includeRef, "includes/missing.html");
+      assert.equal(err.message.includes(srcDir), false);
+      return true;
+    },
+  );
+});
+
+test("rejects traversal includes that escape approved directories", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(path.join(srcDir, "secret.html"), "not public\n", "utf8");
+  await fs.writeFile(
+    path.join(srcDir, "content/index.md"),
+    ["# Page", "", "<!-- include: includes/../secret.html -->"].join("\n"),
+    "utf8",
+  );
+
+  await assert.rejects(
+    () => build(fixtureConfig(srcDir)),
+    {
+      name: "IncludeError",
+      code: "outside-allowed-dirs",
+      includeRef: "includes/../secret.html",
+    },
+  );
+});
+
+test("rejects absolute-path includes", async () => {
+  const srcDir = await createFixtureWebsite();
+  const absoluteInclude = path.join(srcDir, "includes/header.html");
+  await fs.writeFile(
+    path.join(srcDir, "content/index.md"),
+    ["# Page", "", `<!-- include: ${absoluteInclude} -->`].join("\n"),
+    "utf8",
+  );
+
+  await assert.rejects(
+    () => build(fixtureConfig(srcDir)),
+    {
+      name: "IncludeError",
+      code: "absolute-path",
+      includeRef: absoluteInclude,
+    },
+  );
+});
+
+test("rejects includes that resolve outside approved directories through symlinks", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(path.join(srcDir, "secret.html"), "not public\n", "utf8");
+  await fs.symlink(
+    path.join(srcDir, "secret.html"),
+    path.join(srcDir, "includes/secret-link.html"),
+  );
+  await fs.writeFile(
+    path.join(srcDir, "content/index.md"),
+    ["# Page", "", "<!-- include: includes/secret-link.html -->"].join("\n"),
+    "utf8",
+  );
+
+  await assert.rejects(
+    () => build(fixtureConfig(srcDir)),
+    {
+      name: "IncludeError",
+      code: "outside-allowed-dirs",
+      includeRef: "includes/secret-link.html",
+    },
+  );
+});
+
 test("build writes output from an isolated website directory", async () => {
   const srcDir = await createFixtureWebsite();
 

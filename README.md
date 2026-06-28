@@ -220,12 +220,21 @@ Markdown components may also be included:
 <!-- include: components/sidebar.md -->
 ```
 
+Include targets must be relative paths under one of these project source directories:
+
+```text
+includes/
+components/
+```
+
 The renderer will:
 
 1. Load the file
 2. Render Markdown if necessary
 3. Insert the resulting HTML
 4. Resolve nested includes recursively
+
+Missing includes, absolute-path includes, and includes that use `..` traversal to escape the approved directories fail rendering with a controlled include diagnostic. Static build mode exits non-zero. Live preview mode returns a `500` response with a readable diagnostic.
 
 ---
 
