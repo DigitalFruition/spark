@@ -375,7 +375,7 @@ function guessSourceMdFromUrl(urlPath, config) {
   // /           -> content/index.md
   // /about      -> content/about.md
   // /docs/x     -> content/docs/x.md
-  // /docs/x/    -> content/docs/x/index.md
+  // /docs/x/    -> content/docs/x/index.md, not content/docs/x.md
   // /components/sidebar -> components/sidebar.md
   let p = urlPath.split("?")[0].split("#")[0];
 

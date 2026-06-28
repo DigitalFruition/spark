@@ -390,6 +390,92 @@ test("preview renders component routes as unwrapped HTML fragments", async () =>
   }
 });
 
+test("build maps content Markdown files to classic HTML output paths", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(
+    path.join(srcDir, "content/about.md"),
+    ["# About", "", "About page body."].join("\n"),
+    "utf8",
+  );
+  await fs.mkdir(path.join(srcDir, "content/docs"), { recursive: true });
+  await fs.writeFile(
+    path.join(srcDir, "content/docs/getting-started.md"),
+    ["# Getting Started", "", "Nested page body."].join("\n"),
+    "utf8",
+  );
+
+  await build(fixtureConfig(srcDir));
+
+  const outDir = path.join(srcDir, "site-output");
+  assert.match(
+    await fs.readFile(path.join(outDir, "index.html"), "utf8"),
+    /Hello <strong>fixture<\/strong> page\./,
+  );
+  assert.match(
+    await fs.readFile(path.join(outDir, "about.html"), "utf8"),
+    /About page body\./,
+  );
+  assert.match(
+    await fs.readFile(path.join(outDir, "docs/getting-started.html"), "utf8"),
+    /Nested page body\./,
+  );
+  assert.equal(await pathExists(path.join(outDir, "docs/getting-started/index.html")), false);
+});
+
+test("preview maps root, extensionless, and html page routes consistently", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(
+    path.join(srcDir, "content/about.md"),
+    ["# About", "", "About page body."].join("\n"),
+    "utf8",
+  );
+  await fs.mkdir(path.join(srcDir, "content/docs"), { recursive: true });
+  await fs.writeFile(
+    path.join(srcDir, "content/docs/getting-started.md"),
+    ["# Getting Started", "", "Nested page body."].join("\n"),
+    "utf8",
+  );
+
+  const app = await createPreviewApp(fixtureConfig(srcDir));
+  const root = await requestApp(app, "/");
+  const about = await requestApp(app, "/about");
+  const aboutHtml = await requestApp(app, "/about.html");
+  const nested = await requestApp(app, "/docs/getting-started");
+  const nestedHtml = await requestApp(app, "/docs/getting-started.html");
+
+  assert.equal(root.status, 200);
+  assert.match(root.body, /Hello <strong>fixture<\/strong> page\./);
+
+  assert.equal(about.status, 200);
+  assert.equal(aboutHtml.status, 200);
+  assert.equal(about.body, aboutHtml.body);
+  assert.match(about.body, /About page body\./);
+
+  assert.equal(nested.status, 200);
+  assert.equal(nestedHtml.status, 200);
+  assert.equal(nested.body, nestedHtml.body);
+  assert.match(nested.body, /Nested page body\./);
+});
+
+test("preview returns 404 for missing pages and unsupported leaf trailing slash aliases", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.mkdir(path.join(srcDir, "content/docs"), { recursive: true });
+  await fs.writeFile(
+    path.join(srcDir, "content/docs/getting-started.md"),
+    ["# Getting Started", "", "Nested page body."].join("\n"),
+    "utf8",
+  );
+
+  const app = await createPreviewApp(fixtureConfig(srcDir));
+  const missing = await requestApp(app, "/missing");
+  const nestedTrailingSlash = await requestApp(app, "/docs/getting-started/");
+
+  assert.equal(missing.status, 404);
+  assert.match(missing.body, /Not found: \/missing/);
+  assert.equal(nestedTrailingSlash.status, 404);
+  assert.match(nestedTrailingSlash.body, /Not found: \/docs\/getting-started\//);
+});
+
 test("rejects cycles between two include files with a controlled error", async () => {
   const srcDir = await createFixtureWebsite();
   await fs.writeFile(
