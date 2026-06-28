@@ -202,7 +202,13 @@ Replaced with rendered Markdown content.
 {{title}}
 ```
 
-Populated from frontmatter or the first Markdown heading.
+Populated from the first available source:
+
+1. `title` in frontmatter
+2. First Markdown H1
+3. Markdown filename stem
+
+Titles are HTML-escaped when inserted into the template.
 
 ---
 
@@ -256,9 +262,11 @@ title: About Us
 Welcome to our website.
 ```
 
-Supported fields are currently implementation-defined.
+For v1.0.0, the supported frontmatter field is:
 
-The `title` field is used by the template.
+* `title`: used for the `{{title}}` template variable
+
+Frontmatter is metadata only and is not rendered into the page body.
 
 ---
 
