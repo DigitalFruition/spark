@@ -454,7 +454,7 @@ npm test
 
 GitLab CI runs the same tests and publishes JUnit XML test reports for merge requests and `main` branch pipelines.
 
-See `TESTING.MD` for the current test cases, fixture strategy, and CI reporting details.
+See `TESTING.md` for the current test cases, fixture strategy, and CI reporting details.
 
 ---
 

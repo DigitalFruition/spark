@@ -405,15 +405,31 @@ function guessSourceMdFromUrl(urlPath, config) {
   return { kind: "page", absPath: path.resolve(config.srcDir, config.contentDir, mdRel) };
 }
 
-async function serve(config) {
+async function startPreviewServer(config) {
   config = { ...DEFAULTS, ...config };
-  const absOutDir = path.resolve(config.srcDir, config.outDir);
   const app = await createPreviewApp(config);
 
-  app.listen(Number(config.port), () => {
-    console.log(`Preview: http://localhost:${config.port}`);
-    console.log(`Pages from /${config.contentDir}, components from /${config.componentsDir}`);
+  return new Promise((resolve, reject) => {
+    const server = app.listen(Number(config.port));
+    const onError = (err) => reject(err);
+    server.once("error", onError);
+    server.once("listening", () => {
+      server.off("error", onError);
+      resolve(server);
+    });
   });
+}
+
+async function serve(config) {
+  config = { ...DEFAULTS, ...config };
+  const server = await startPreviewServer(config);
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : config.port;
+
+  console.log(`Preview: http://localhost:${port}`);
+  console.log(`Pages from /${config.contentDir}, components from /${config.componentsDir}`);
+
+  return server;
 }
 
 async function createPreviewApp(config) {
@@ -540,6 +556,8 @@ export {
   guessSourceMdFromUrl,
   parseArgs,
   renderMarkdownToHtml,
+  serve,
+  startPreviewServer,
 };
 
 // Run the CLI only when this file is executed directly, not when imported by tests.

@@ -7,7 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { DEFAULTS, build, buildRenderer, createPreviewApp } from "../site.js";
+import { DEFAULTS, build, buildRenderer, createPreviewApp, startPreviewServer } from "../site.js";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -103,6 +103,43 @@ async function requestApp(app, route) {
       });
     };
     app.handle(req, res);
+  });
+}
+
+async function requestServer(server, route) {
+  const address = server.address();
+  assert.equal(typeof address, "object");
+  assert.ok(address);
+
+  const url = new URL(route, `http://127.0.0.1:${address.port}`);
+
+  return new Promise((resolve, reject) => {
+    const req = http.request(url, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      res.on("end", () => {
+        resolve({
+          status: res.statusCode,
+          headers: res.headers,
+          body: Buffer.concat(chunks).toString("utf8"),
+        });
+      });
+    });
+
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+async function closeServer(server) {
+  await new Promise((resolve, reject) => {
+    server.close((err) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve();
+    });
   });
 }
 
@@ -474,6 +511,76 @@ test("preview returns 404 for missing pages and unsupported leaf trailing slash 
   assert.match(missing.body, /Not found: \/missing/);
   assert.equal(nestedTrailingSlash.status, 404);
   assert.match(nestedTrailingSlash.body, /Not found: \/docs\/getting-started\//);
+});
+
+test("preview server serves an isolated fixture project over an ephemeral port", async () => {
+  const srcDir = await createFixtureWebsite();
+  const repoRoot = path.resolve(testDir, "..");
+
+  assert.ok(path.relative(repoRoot, srcDir).startsWith(".."));
+
+  await fs.writeFile(
+    path.join(srcDir, "content/about.md"),
+    ["# Fixture About", "", "Known **fixture** page."].join("\n"),
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(srcDir, "content/broken.md"),
+    ["# Broken", "", "<!-- include: includes/missing.html -->"].join("\n"),
+    "utf8",
+  );
+  await fs.mkdir(path.join(srcDir, "components"), { recursive: true });
+  await fs.writeFile(
+    path.join(srcDir, "components/sidebar.md"),
+    ["## Fixture Sidebar", "", "Reusable **component** fragment."].join("\n"),
+    "utf8",
+  );
+  await fs.mkdir(path.join(srcDir, "assets/css"), { recursive: true });
+  await fs.writeFile(
+    path.join(srcDir, "assets/css/site.css"),
+    "body { color: rebeccapurple; }\n",
+    "utf8",
+  );
+
+  const server = await startPreviewServer(fixtureConfig(srcDir, { port: 0 }));
+
+  try {
+    const home = await requestServer(server, "/");
+    assert.equal(home.status, 200);
+    assert.match(home.headers["content-type"], /text\/html/);
+    assert.match(home.body, /<title>Fixture Home<\/title>/);
+    assert.match(home.body, /Hello <strong>fixture<\/strong> page\./);
+    assert.match(home.body, /<header>Fixture Header<\/header>/);
+
+    const about = await requestServer(server, "/about");
+    assert.equal(about.status, 200);
+    assert.match(about.body, /<h1>Fixture About<\/h1>/);
+    assert.match(about.body, /Known <strong>fixture<\/strong> page\./);
+
+    const component = await requestServer(server, "/components/sidebar");
+    assert.equal(component.status, 200);
+    assert.match(component.headers["content-type"], /text\/html/);
+    assert.match(component.body, /<h2>Fixture Sidebar<\/h2>/);
+    assert.match(component.body, /Reusable <strong>component<\/strong> fragment\./);
+    assert.doesNotMatch(component.body, /<!doctype html>|Fixture Header|<main>/);
+
+    const asset = await requestServer(server, "/assets/css/site.css");
+    assert.equal(asset.status, 200);
+    assert.match(asset.headers["content-type"], /text\/css/);
+    assert.equal(asset.body, "body { color: rebeccapurple; }\n");
+
+    const missing = await requestServer(server, "/missing");
+    assert.equal(missing.status, 404);
+    assert.match(missing.body, /Not found: \/missing/);
+
+    const broken = await requestServer(server, "/broken");
+    assert.equal(broken.status, 500);
+    assert.match(broken.headers["content-type"], /text\/plain/);
+    assert.match(broken.body, /Include missing: includes\/missing\.html/);
+    assert.equal(broken.body.includes(srcDir), false);
+  } finally {
+    await closeServer(server);
+  }
 });
 
 test("rejects cycles between two include files with a controlled error", async () => {
