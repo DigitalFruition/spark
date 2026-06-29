@@ -69,6 +69,9 @@ function parseArgs(argv) {
 
 function cliName(argv = process.argv) {
   const command = path.basename(argv[1] ?? "site.js");
+  if (command === "df-spark.js") {
+    return "df-spark";
+  }
   if (path.basename(argv[0] ?? "") === "node") {
     return `node ${command}`;
   }
@@ -674,6 +677,15 @@ async function main() {
 
 }
 
+async function runCli() {
+  try {
+    await main();
+  } catch (e) {
+    console.error(e instanceof IncludeError || e instanceof ConfigError ? e.message : e);
+    process.exit(1);
+  }
+}
+
 export {
   DEFAULTS,
   build,
@@ -685,6 +697,7 @@ export {
   main,
   parseArgs,
   renderMarkdownToHtml,
+  runCli,
   serve,
   startPreviewServer,
   usage,
@@ -692,8 +705,5 @@ export {
 
 // Run the CLI only when this file is executed directly, not when imported by tests.
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
-  main().catch((e) => {
-    console.error(e instanceof IncludeError || e instanceof ConfigError ? e.message : e);
-    process.exit(1);
-  });
+  runCli();
 }

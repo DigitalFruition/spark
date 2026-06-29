@@ -1,10 +1,37 @@
 {
-  "name": "static-md-site",
-  "private": true,
+  "name": "@digitalfruition/spark",
+  "version": "0.1.0",
+  "description": "Digital Fruition SPARK static Markdown site generator.",
   "type": "module",
+  "main": "./site.js",
+  "exports": {
+    ".": "./site.js"
+  },
+  "license": "MIT",
+  "author": "Digital Fruition, LLC",
+  "bin": {
+    "df-spark": "./bin/df-spark.js"
+  },
+  "files": [
+    "bin/",
+    "site.js",
+    "README.md",
+    "AGENTS.md",
+    "AI_USAGE.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "static-site-generator",
+    "markdown",
+    "spark",
+    "digital-fruition"
+  ],
   "scripts": {
-    "build": "node site.js build",
-    "serve": "node site.js serve --port 3000",
+    "build": "node bin/df-spark.js build",
+    "serve": "node bin/df-spark.js serve --port 3000",
     "test": "node --test",
     "test:junit": "node -e \"fs.mkdirSync('reports', { recursive: true })\" && node --test --test-reporter=junit --test-reporter-destination=reports/junit.xml"
   },
