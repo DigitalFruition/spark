@@ -1,8 +1,8 @@
-# Static Markdown Site Generator
+# DF SPARK
 
-A lightweight static website generator written in Node.js.
+Digital Fruition SPARK is a lightweight static website generator written in Node.js.
 
-This project converts Markdown files into HTML pages using a shared HTML template and reusable include files. It supports both:
+It converts Markdown files into HTML pages using a shared HTML template and reusable include files. It supports both:
 
 * **Live preview mode** for local development
 * **Static build mode** for CI/CD pipelines and CDN deployment
@@ -15,6 +15,85 @@ The generated output is pure static HTML, CSS, JavaScript, and assets suitable f
 * GitHub Pages
 * Netlify
 * Any static web host
+
+---
+
+# Quick Start
+
+Use DF SPARK from a website repository that contains your content, templates, includes, components, and assets.
+
+Install the package:
+
+```bash
+npm install --save-dev @digitalfruition/spark
+```
+
+Add package scripts:
+
+```json
+{
+  "scripts": {
+    "build": "df-spark build",
+    "serve": "df-spark serve --port 3000"
+  }
+}
+```
+
+Create the expected site files:
+
+```text
+.
+├── package.json
+├── template.html
+├── content/
+│   └── index.md
+├── includes/
+├── components/
+└── assets/
+```
+
+Add a minimal `template.html`:
+
+```html
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{{title}}</title>
+</head>
+<body>
+<main>
+{{body}}
+</main>
+</body>
+</html>
+```
+
+Add `content/index.md`:
+
+```markdown
+---
+title: Home
+---
+
+# Home
+
+Welcome to the site.
+```
+
+Preview locally:
+
+```bash
+npm run serve
+```
+
+Build static output:
+
+```bash
+npm run build
+```
+
+The generated site is written to `dist/`.
 
 ---
 
@@ -434,15 +513,17 @@ This mode is intended for CI/CD pipelines.
 Show CLI usage:
 
 ```bash
-node site.js --help
+df-spark --help
 ```
 
-The primary project commands remain:
+From this repository checkout, the primary project commands remain:
 
 ```bash
 npm run build
 npm run serve
 ```
+
+The package exposes a `df-spark` binary for website repositories that depend on SPARK.
 
 Supported build flags:
 
@@ -465,16 +546,21 @@ Supported preview flags:
 --template template.html
 ```
 
-Once the package binary name is finalized, independent website repositories should call the package binary from their npm scripts instead of referencing this repository's `site.js` file directly. For example:
+Independent website repositories should call the package binary from their npm scripts instead of referencing this repository's `site.js` file directly. For example:
 
 ```json
 {
+  "devDependencies": {
+    "@digitalfruition/spark": "^0.1.0"
+  },
   "scripts": {
-    "build": "md-site build",
-    "serve": "md-site serve --port 3000"
+    "build": "df-spark build",
+    "serve": "df-spark serve --port 3000"
   }
 }
 ```
+
+The direct `node site.js ...` entrypoint remains available for repository development and tests, but website repositories should use `df-spark`.
 
 ---
 

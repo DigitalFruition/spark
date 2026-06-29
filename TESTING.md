@@ -70,7 +70,7 @@ It verifies:
 * Primary npm scripts are shown.
 * The preview host flag is documented.
 
-This protects the help path used by developers and the future package binary entrypoint.
+This protects the direct development CLI help path.
 
 ### `cli unknown commands print usage and exit non-zero`
 
@@ -107,6 +107,43 @@ It verifies:
 * Missing option values are not coerced to boolean configuration values.
 
 This protects CLI parsing from treating incomplete options as valid settings.
+
+### `package binary help prints binary usage`
+
+This test runs the `df-spark` package binary through a temporary npm-style binary shim.
+
+It verifies:
+
+* The binary exits successfully for `--help`.
+* Usage text uses `df-spark` as the command name.
+* Usage text does not fall back to the direct `node site.js` development entrypoint.
+
+This protects the package binary help path used by external website repositories.
+
+### `package binary builds an external website fixture`
+
+This test runs `df-spark build` from an isolated temporary website directory outside the generator source tree.
+
+It verifies:
+
+* The package binary can build a consumer website fixture.
+* Generated output is written inside the fixture website.
+* The fixture does not need a copy of the generator source file.
+
+This protects the package-plus-website repository model.
+
+### `package binary serves an external website fixture`
+
+This test runs `df-spark serve --port 0` from an isolated temporary website directory and sends a real HTTP request to the preview server.
+
+It verifies:
+
+* The package binary can preview a consumer website fixture.
+* The preview server binds to an ephemeral port.
+* The rendered fixture page is served over HTTP.
+* The server process is stopped after the test.
+
+This protects preview behavior when SPARK is used as an installed package.
 
 ### `renders Markdown content into a templated HTML page`
 

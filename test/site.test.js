@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { once } from "node:events";
 import fs from "node:fs/promises";
 import http from "node:http";
 import { Socket } from "node:net";
@@ -14,9 +15,10 @@ import { DEFAULTS, build, buildRenderer, createPreviewApp, startPreviewServer } 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const execFileAsync = promisify(execFile);
 const sitePath = path.resolve(testDir, "../site.js");
+const binPath = path.resolve(testDir, "../bin/df-spark.js");
 
 async function createFixtureWebsite() {
-  const srcDir = await fs.mkdtemp(path.join(os.tmpdir(), "md-site-test-"));
+  const srcDir = await fs.mkdtemp(path.join(os.tmpdir(), "df-spark-test-"));
 
   await fs.mkdir(path.join(srcDir, "content"), { recursive: true });
   await fs.mkdir(path.join(srcDir, "includes"), { recursive: true });
@@ -149,8 +151,12 @@ async function closeServer(server) {
 
 async function runCli(args, options = {}) {
   try {
-    const { stdout, stderr } = await execFileAsync(process.execPath, [sitePath, ...args], {
+    const { stdout, stderr } = await execFileAsync(options.command ?? process.execPath, [
+      ...(options.command ? [] : [sitePath]),
+      ...args,
+    ], {
       cwd: options.cwd,
+      env: options.env,
     });
     return { code: 0, stdout, stderr };
   } catch (e) {
@@ -160,6 +166,59 @@ async function runCli(args, options = {}) {
       stderr: e.stderr ?? "",
     };
   }
+}
+
+async function createPackageBinShim() {
+  const binDir = await fs.mkdtemp(path.join(os.tmpdir(), "df-spark-bin-"));
+  await fs.symlink(binPath, path.join(binDir, "df-spark"));
+  return binDir;
+}
+
+function withPath(binDir) {
+  return {
+    ...process.env,
+    PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+  };
+}
+
+async function startCommand(args, options = {}) {
+  const child = spawn(options.command ?? process.execPath, args, {
+    cwd: options.cwd,
+    env: options.env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+
+  const ready = new Promise((resolve, reject) => {
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+      const match = stdout.match(/Preview: http:\/\/127\.0\.0\.1:(\d+)/);
+      if (match) {
+        resolve(Number(match[1]));
+      }
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      reject(new Error(`Command exited before it was ready: ${code}\n${stderr}`));
+    });
+  });
+
+  return {
+    child,
+    ready,
+    output: () => ({ stdout, stderr }),
+  };
+}
+
+async function stopCommand(child) {
+  if (!child) return;
+  if (child.exitCode !== null) return;
+  child.kill("SIGTERM");
+  await once(child, "exit");
 }
 
 test("cli help prints usage", async () => {
@@ -205,6 +264,74 @@ test("cli reports missing option values clearly", async () => {
   assert.notEqual(missingContent.code, 0);
   assert.equal(missingContent.stdout, "");
   assert.match(missingContent.stderr, /--content requires a value/);
+});
+
+test("package binary help prints binary usage", async () => {
+  const binDir = await createPackageBinShim();
+  const result = await runCli(["--help"], {
+    command: "df-spark",
+    env: withPath(binDir),
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /Usage:/);
+  assert.match(result.stdout, /df-spark build/);
+  assert.match(result.stdout, /df-spark serve/);
+  assert.doesNotMatch(result.stdout, /node site\.js/);
+  assert.equal(result.stderr, "");
+});
+
+test("package binary builds an external website fixture", async () => {
+  const srcDir = await createFixtureWebsite();
+  const binDir = await createPackageBinShim();
+
+  const result = await runCli(["build", "--out", "site-output"], {
+    command: "df-spark",
+    cwd: srcDir,
+    env: withPath(binDir),
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /Built -> site-output\//);
+  assert.match(
+    await fs.readFile(path.join(srcDir, "site-output/index.html"), "utf8"),
+    /Hello <strong>fixture<\/strong> page\./,
+  );
+  assert.equal(await pathExists(path.join(srcDir, "site.js")), false);
+});
+
+test("package binary serves an external website fixture", async () => {
+  const srcDir = await createFixtureWebsite();
+  const binDir = await createPackageBinShim();
+  const command = await startCommand(["serve", "--port", "0"], {
+    command: "df-spark",
+    cwd: srcDir,
+    env: withPath(binDir),
+  });
+
+  try {
+    const port = await command.ready;
+    const response = await new Promise((resolve, reject) => {
+      const req = http.request(`http://127.0.0.1:${port}/`, (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        res.on("end", () => {
+          resolve({
+            status: res.statusCode,
+            body: Buffer.concat(chunks).toString("utf8"),
+          });
+        });
+      });
+      req.on("error", reject);
+      req.end();
+    });
+
+    assert.equal(response.status, 200);
+    assert.match(response.body, /Hello <strong>fixture<\/strong> page\./);
+    assert.match(command.output().stdout, /Pages from \/content, components from \/components/);
+  } finally {
+    await stopCommand(command.child);
+  }
 });
 
 test("renders Markdown content into a templated HTML page", async () => {
@@ -828,7 +955,7 @@ test("build output contains only deployable generated files", async () => {
 
 test("ignores custom assetsDir and uses the fixed assets convention", async () => {
   const srcDir = await createFixtureWebsite();
-  const externalAssetsDir = await fs.mkdtemp(path.join(os.tmpdir(), "md-site-shared-assets-"));
+  const externalAssetsDir = await fs.mkdtemp(path.join(os.tmpdir(), "df-spark-shared-assets-"));
   await fs.writeFile(path.join(externalAssetsDir, "leaked.txt"), "outside asset\n", "utf8");
 
   const escapingAssetsDir = path.relative(srcDir, externalAssetsDir);
