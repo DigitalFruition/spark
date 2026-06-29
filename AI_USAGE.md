@@ -78,10 +78,10 @@ The following summaries describe known or planned AI-assisted work. They are int
 | 14 | README v1.0 documentation | OpenAI Codex assisted with planning future README alignment work. Implementation remains subject to future human review. |
 | 15 | Contributor guide | OpenAI Codex assisted with planning contributor documentation and AI-agent contribution expectations. Implementation remains subject to future human review. |
 | 16 | Release notes and changelog | OpenAI Codex assisted with planning future release documentation. Implementation remains subject to future human review. |
-| 17 | Package CLI for external sites | OpenAI Codex assisted with planning package CLI work for independent website repositories. Implementation remains subject to future human review. |
+| 17 | Package CLI for external sites | OpenAI Codex assisted with adding the `df-spark` package binary, package metadata, external website fixture CLI tests, and consumer README quickstart. |
 | 18 | Template-site repository pattern | OpenAI Codex assisted with planning the copyable template-site model. Implementation remains subject to future human review. |
 | 19 | Public GitHub publication readiness | OpenAI Codex assisted with planning public publication checks, licensing, AI usage disclosure, and first-push hygiene. |
-| 20 | Package publish metadata review | OpenAI Codex assisted with planning package metadata and `npm pack` review work. |
+| 20 | Package publish metadata review | OpenAI Codex assisted with reviewing package metadata, package contents, public package posture, and deterministic package-install verification. |
 | 21 | Replace placeholder sample content | OpenAI Codex assisted with planning replacement of placeholder sample site content before public release. |
 
 ## Commit Attribution

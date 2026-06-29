@@ -564,6 +564,18 @@ The direct `node site.js ...` entrypoint remains available for repository develo
 
 ---
 
+# Package Metadata
+
+DF SPARK is shaped as a public scoped npm package named `@digitalfruition/spark` with the CLI binary `df-spark`.
+
+Publishing remains a human release action. The package includes no publish script, credentials, or deployment configuration.
+
+The npm package uses a `files` allowlist so packed releases include only runtime source and public documentation. Local planning files, generated output, reports, tests, and dependency folders are excluded from the package tarball.
+
+The package is configured with MIT licensing and public npm access. Repository, issue tracker, and homepage metadata will be added once the public GitHub repository URL is created.
+
+---
+
 # CI/CD Example
 
 ```bash

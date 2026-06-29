@@ -9,6 +9,9 @@
   },
   "license": "MIT",
   "author": "Digital Fruition, LLC",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "df-spark": "./bin/df-spark.js"
   },
