@@ -28,12 +28,27 @@ The `reports/` directory is ignored by Git.
 
 ## CI Behavior
 
+GitHub Actions runs for:
+
+* Pull requests
+* Pushes to `main`
+
+The GitHub Actions workflow uses explicit Node.js versions and runs:
+
+```bash
+npm ci
+npm test
+npm run build
+```
+
+It also packs the `@digitalfruition/spark` package, installs the resulting `.tgz` into a temporary external website fixture, runs `df-spark build` through that fixture's npm script, and verifies the generated `dist/index.html`.
+
 GitLab CI runs tests for:
 
 * Merge request pipelines
 * Pipelines on the `main` branch
 
-The CI job runs:
+The GitLab CI job runs:
 
 ```bash
 npm ci

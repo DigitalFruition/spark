@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node.js ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version:
+          - 22.x
+          - 24.x
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build sample site
+        run: npm run build
+
+      - name: Pack package
+        run: |
+          tarball_name="$(npm pack --pack-destination "$RUNNER_TEMP")"
+          echo "SPARK_TARBALL=$RUNNER_TEMP/$tarball_name" >> "$GITHUB_ENV"
+
+      - name: Smoke test packed CLI in external fixture
+        run: |
+          fixture_dir="$(mktemp -d)"
+          mkdir -p "$fixture_dir/content"
+
+          cat > "$fixture_dir/package.json" <<'JSON'
+          {
+            "private": true,
+            "scripts": {
+              "build": "df-spark build"
+            },
+            "devDependencies": {}
+          }
+          JSON
+
+          cat > "$fixture_dir/template.html" <<'HTML'
+          <!doctype html>
+          <html>
+          <head>
+              <meta charset="utf-8">
+              <title>{{title}}</title>
+          </head>
+          <body>
+          <main>
+          {{body}}
+          </main>
+          </body>
+          </html>
+          HTML
+
+          cat > "$fixture_dir/content/index.md" <<'MARKDOWN'
+          ---
+          title: CI Fixture
+          ---
+
+          # CI Fixture
+
+          Packaged CLI smoke test content.
+          MARKDOWN
+
+          cd "$fixture_dir"
+          npm install --no-audit --no-fund --save-dev "$SPARK_TARBALL"
+          npm run build
+          test -f dist/index.html
+          grep -q "<title>CI Fixture</title>" dist/index.html
+          grep -q "<h1>CI Fixture</h1>" dist/index.html
+          grep -q "Packaged CLI smoke test content." dist/index.html

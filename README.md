@@ -627,6 +627,7 @@ The package is configured with MIT licensing, public npm access, and public GitH
 
 ```bash
 npm ci
+npm test
 npm run build
 ```
 
@@ -648,7 +649,9 @@ Run the deterministic test suite with:
 npm test
 ```
 
-GitLab CI runs the same tests and publishes JUnit XML test reports for merge requests and `main` branch pipelines.
+GitHub Actions runs on pull requests and pushes to `main` with explicit Node.js versions. It installs dependencies with `npm ci`, runs `npm test`, builds the sample site, packs the `@digitalfruition/spark` package, installs the tarball into a temporary external website fixture, and invokes `df-spark build` from that fixture.
+
+GitLab CI also runs the test suite for merge requests and `main` branch pipelines using the JUnit reporter.
 
 See `TESTING.md` for the current test cases, fixture strategy, and CI reporting details.
 
