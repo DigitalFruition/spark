@@ -9,6 +9,14 @@
   },
   "license": "MIT",
   "author": "Digital Fruition, LLC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DigitalFruition/spark.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DigitalFruition/spark/issues"
+  },
+  "homepage": "https://github.com/DigitalFruition/spark#readme",
   "publishConfig": {
     "access": "public"
   },

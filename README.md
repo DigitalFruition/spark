@@ -619,7 +619,7 @@ Publishing remains a human release action. The package includes no publish scrip
 
 The npm package uses a `files` allowlist so packed releases include runtime source, public documentation, and the copyable basic example. Local planning files, generated output, reports, tests, and dependency folders are excluded from the package tarball.
 
-The package is configured with MIT licensing and public npm access. Repository, issue tracker, and homepage metadata will be added once the public GitHub repository URL is created.
+The package is configured with MIT licensing, public npm access, and public GitHub repository metadata.
 
 ---
 

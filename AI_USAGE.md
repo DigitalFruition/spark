@@ -81,7 +81,7 @@ The following summaries describe known or planned AI-assisted work. They are int
 | 17 | Package CLI for external sites | OpenAI Codex assisted with adding the `df-spark` package binary, package metadata, external website fixture CLI tests, and consumer README quickstart. |
 | 18 | Template-site repository pattern | OpenAI Codex assisted with planning the copyable template-site model. Implementation remains subject to future human review. |
 | 19 | Public GitHub publication readiness | OpenAI Codex assisted with planning public publication checks, licensing, AI usage disclosure, and first-push hygiene. |
-| 20 | Package publish metadata review | OpenAI Codex assisted with reviewing package metadata, package contents, public package posture, and deterministic package-install verification. |
+| 20 | Package publish metadata review | OpenAI Codex assisted with reviewing package metadata, package contents, public package posture, deterministic package-install verification, and public GitHub metadata. |
 | 21 | Replace placeholder sample content | OpenAI Codex assisted with replacing placeholder repository sample content, fixing navigation to existing pages, adding page-local current-nav styling, adding a nested sample page, and documenting the public-facing example structure. |
 
 ## Commit Attribution
