@@ -73,7 +73,7 @@ The following summaries describe known or planned AI-assisted work. They are int
 | 09 | URL and output mapping | OpenAI Codex assisted with tests and documentation for classic `.html` output paths and preview URL mapping. |
 | 10 | Preview server tests | OpenAI Codex assisted with preview server integration tests, an exported testable server startup path, and preview behavior documentation. |
 | 11 | CLI polish | OpenAI Codex assisted with CLI help text, clearer error handling, loopback preview binding, option validation, and CLI behavior tests. |
-| 12 | GitHub Actions CI | OpenAI Codex assisted with planning GitHub Actions CI requirements. Implementation remains subject to future human review. |
+| 12 | GitHub Actions CI | OpenAI Codex assisted with implementing a GitHub Actions CI workflow for pull requests and `main` pushes, including `npm ci`, tests, build, package packing, and packaged `df-spark` fixture verification. Human review remains required before relying on this CI for release decisions. |
 | 13 | Example site fixture | OpenAI Codex assisted with adding a standalone `examples/basic-site/` fixture, SitePalette-style template structure, reduced legacy-inspired CSS, sample pages, includes, components, and CLI-oriented verification. |
 | 14 | README v1.0 documentation | OpenAI Codex assisted with planning future README alignment work. Implementation remains subject to future human review. |
 | 15 | Contributor guide | OpenAI Codex assisted with adding contributor documentation for setup, testing, example-site usage, commit workflow, AI attribution, and public publication hygiene. |

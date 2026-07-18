@@ -52,6 +52,8 @@ npm --cache /private/tmp/df-spark-npm-cache pack --dry-run
 
 Use `npm pack --dry-run` for package-facing changes so the tarball contents stay intentional.
 
+GitHub Actions runs on pull requests and pushes to `main`. The workflow uses explicit Node.js versions, runs `npm ci`, `npm test`, and `npm run build`, then verifies the packed `@digitalfruition/spark` tarball by installing it into a temporary external website fixture and invoking `df-spark build` there.
+
 ## Website Template Usage
 
 The copyable starter website is under:
