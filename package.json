@@ -19,6 +19,7 @@
     "bin/",
     "site.js",
     "README.md",
+    "CONTRIBUTING.md",
     "AGENTS.md",
     "AI_USAGE.md",
     "LICENSE",

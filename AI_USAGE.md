@@ -76,7 +76,7 @@ The following summaries describe known or planned AI-assisted work. They are int
 | 12 | GitHub Actions CI | OpenAI Codex assisted with planning GitHub Actions CI requirements. Implementation remains subject to future human review. |
 | 13 | Example site fixture | OpenAI Codex assisted with adding a standalone `examples/basic-site/` fixture, SitePalette-style template structure, reduced legacy-inspired CSS, sample pages, includes, components, and CLI-oriented verification. |
 | 14 | README v1.0 documentation | OpenAI Codex assisted with planning future README alignment work. Implementation remains subject to future human review. |
-| 15 | Contributor guide | OpenAI Codex assisted with planning contributor documentation and AI-agent contribution expectations. Implementation remains subject to future human review. |
+| 15 | Contributor guide | OpenAI Codex assisted with adding contributor documentation for setup, testing, example-site usage, commit workflow, AI attribution, and public publication hygiene. |
 | 16 | Release notes and changelog | OpenAI Codex assisted with planning future release documentation. Implementation remains subject to future human review. |
 | 17 | Package CLI for external sites | OpenAI Codex assisted with adding the `df-spark` package binary, package metadata, external website fixture CLI tests, and consumer README quickstart. |
 | 18 | Template-site repository pattern | OpenAI Codex assisted with planning the copyable template-site model. Implementation remains subject to future human review. |
