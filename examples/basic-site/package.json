@@ -1,0 +1,13 @@
+{
+  "name": "df-spark-basic-site",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "df-spark build",
+    "serve": "df-spark serve --port 3000"
+  },
+  "devDependencies": {
+    "@digitalfruition/spark": "^0.1.0"
+  }
+}

@@ -1,7 +1,7 @@
-<aside>
+## Site Sections
 
-## Example Sidebar
+* [Overview](/index.html)
+* [Project Notes](/about.html)
+* [Start a Site](/docs/getting-started.html)
 
-This reusable sidebar is written in Markdown and rendered as an HTML fragment.
-
-</aside>
+This left navigation is a Markdown component rendered inside the shared template.

@@ -16,6 +16,7 @@ const testDir = path.dirname(fileURLToPath(import.meta.url));
 const execFileAsync = promisify(execFile);
 const sitePath = path.resolve(testDir, "../site.js");
 const binPath = path.resolve(testDir, "../bin/df-spark.js");
+const basicExamplePath = path.resolve(testDir, "../examples/basic-site");
 
 async function createFixtureWebsite() {
   const srcDir = await fs.mkdtemp(path.join(os.tmpdir(), "df-spark-test-"));
@@ -58,6 +59,12 @@ async function createFixtureWebsite() {
     "utf8",
   );
 
+  return srcDir;
+}
+
+async function createBasicExampleCopy() {
+  const srcDir = await fs.mkdtemp(path.join(os.tmpdir(), "df-spark-basic-example-"));
+  await fs.cp(basicExamplePath, srcDir, { recursive: true });
   return srcDir;
 }
 
@@ -329,6 +336,91 @@ test("package binary serves an external website fixture", async () => {
     assert.equal(response.status, 200);
     assert.match(response.body, /Hello <strong>fixture<\/strong> page\./);
     assert.match(command.output().stdout, /Pages from \/content, components from \/components/);
+  } finally {
+    await stopCommand(command.child);
+  }
+});
+
+test("basic example builds from its npm script with the package binary", async () => {
+  const srcDir = await createBasicExampleCopy();
+  const binDir = await createPackageBinShim();
+  const result = await runCli(["run", "build", "--", "--out", "site-output"], {
+    command: "npm",
+    cwd: srcDir,
+    env: withPath(binDir),
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /Built -> site-output\//);
+
+  const outDir = path.join(srcDir, "site-output");
+  const home = await fs.readFile(path.join(outDir, "index.html"), "utf8");
+  const nested = await fs.readFile(path.join(outDir, "docs/getting-started.html"), "utf8");
+  const component = await fs.readFile(path.join(outDir, "components/sidebar.html"), "utf8");
+  const css = await fs.readFile(path.join(outDir, "assets/css/site.css"), "utf8");
+
+  assert.match(home, /<title>Basic SPARK Site<\/title>/);
+  assert.match(home, /id="header_div"/);
+  assert.match(home, /id="topnav_div"/);
+  assert.match(home, /id="leftnav_div"/);
+  assert.match(home, /id="rightnav_div"/);
+  assert.match(home, /id="content_div"/);
+  assert.match(home, /id="footer_div"/);
+  assert.match(home, /<h2>Build or Preview<\/h2>/);
+  assert.match(nested, /<title>Start from the Basic Example<\/title>/);
+  assert.match(component, /This sidebar is a reusable Markdown component/);
+  assert.match(css, /#body_div/);
+});
+
+test("basic example previews pages, components, and assets through the package binary", async () => {
+  const srcDir = await createBasicExampleCopy();
+  const binDir = await createPackageBinShim();
+  const command = await startCommand(["serve", "--port", "0"], {
+    command: "df-spark",
+    cwd: srcDir,
+    env: withPath(binDir),
+  });
+
+  try {
+    const port = await command.ready;
+
+    const request = (route) => new Promise((resolve, reject) => {
+      const req = http.request(`http://127.0.0.1:${port}${route}`, (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        res.on("end", () => {
+          resolve({
+            status: res.statusCode,
+            headers: res.headers,
+            body: Buffer.concat(chunks).toString("utf8"),
+          });
+        });
+      });
+      req.on("error", reject);
+      req.end();
+    });
+
+    const home = await request("/");
+    const nested = await request("/docs/getting-started");
+    const component = await request("/components/sidebar");
+    const asset = await request("/assets/css/site.css");
+
+    assert.equal(home.status, 200);
+    assert.match(home.body, /<h1>A Small Site You Can Copy<\/h1>/);
+    assert.match(home.body, /id="container"/);
+
+    assert.equal(nested.status, 200);
+    assert.match(nested.body, /<title>Start from the Basic Example<\/title>/);
+
+    assert.equal(component.status, 200);
+    assert.match(component.headers["content-type"], /text\/html/);
+    assert.match(component.body, /<h2>Sections<\/h2>/);
+    assert.doesNotMatch(component.body, /<!doctype html>|id="container"/);
+
+    assert.equal(asset.status, 200);
+    assert.match(asset.headers["content-type"], /text\/css/);
+    assert.match(asset.body, /#topnav_div ul/);
+    assert.match(asset.body, /#right_div/);
   } finally {
     await stopCommand(command.child);
   }

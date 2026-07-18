@@ -21,7 +21,8 @@
     "README.md",
     "AGENTS.md",
     "AI_USAGE.md",
-    "LICENSE"
+    "LICENSE",
+    "examples/"
   ],
   "engines": {
     "node": ">=22"

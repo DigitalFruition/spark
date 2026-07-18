@@ -97,6 +97,39 @@ The generated site is written to `dist/`.
 
 ---
 
+# Example Site
+
+For a fuller starter, copy the example website:
+
+```bash
+cp -R examples/basic-site my-site
+cd my-site
+npm install
+npm run serve
+```
+
+The example is shaped like a standalone website repository. Its npm scripts call the package binary:
+
+```json
+{
+  "scripts": {
+    "build": "df-spark build",
+    "serve": "df-spark serve --port 3000"
+  }
+}
+```
+
+It demonstrates:
+
+* A SitePalette-style template structure with `header_div`, `topnav_div`, `leftnav_div`, `rightnav_div`, `content_div`, and `footer_div`
+* Frontmatter titles
+* HTML and Markdown includes
+* Markdown components
+* A nested page under `content/docs/`
+* Static CSS under `assets/`
+
+---
+
 # Project Goals
 
 ## Simplicity
@@ -150,12 +183,26 @@ A single command renders the entire site into a static `dist/` directory suitabl
 │
 ├── includes/
 │   ├── header.html
-│   ├── nav.html
-│   └── footer.html
+│   ├── nav.md
+│   └── footer.md
 │
 ├── components/
 │   ├── sidebar.md
+│   ├── rightnav.md
 │   └── callout.md
+│
+├── assets/
+│   └── css/
+│       └── site.css
+│
+├── examples/
+│   └── basic-site/
+│       ├── package.json
+│       ├── template.html
+│       ├── assets/
+│       ├── components/
+│       ├── content/
+│       └── includes/
 │
 ├── content/
 │   ├── index.md
@@ -234,8 +281,8 @@ Examples:
 
 ```text
 includes/header.html
-includes/footer.html
-includes/nav.html
+includes/footer.md
+includes/nav.md
 ```
 
 These are not published directly.
@@ -570,7 +617,7 @@ DF SPARK is shaped as a public scoped npm package named `@digitalfruition/spark`
 
 Publishing remains a human release action. The package includes no publish script, credentials, or deployment configuration.
 
-The npm package uses a `files` allowlist so packed releases include only runtime source and public documentation. Local planning files, generated output, reports, tests, and dependency folders are excluded from the package tarball.
+The npm package uses a `files` allowlist so packed releases include runtime source, public documentation, and the copyable basic example. Local planning files, generated output, reports, tests, and dependency folders are excluded from the package tarball.
 
 The package is configured with MIT licensing and public npm access. Repository, issue tracker, and homepage metadata will be added once the public GitHub repository URL is created.
 
