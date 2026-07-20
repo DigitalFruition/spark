@@ -83,7 +83,7 @@ The following summaries describe known or planned AI-assisted work. They are int
 | 19 | Public GitHub publication readiness | OpenAI Codex assisted with planning public publication checks, licensing, AI usage disclosure, and first-push hygiene. |
 | 20 | Package publish metadata review | OpenAI Codex assisted with reviewing package metadata, package contents, public package posture, deterministic package-install verification, and public GitHub metadata. |
 | 21 | Replace placeholder sample content | OpenAI Codex assisted with replacing placeholder repository sample content, fixing navigation to existing pages, adding page-local current-nav styling, adding a nested sample page, and documenting the public-facing example structure. |
-| GH-02 | HTML content passthrough | OpenAI Codex assisted with adding passthrough HTML page rendering, Markdown-preference warnings for duplicate page bodies, tests, and README documentation. |
+| GH-02 | HTML content passthrough | OpenAI Codex assisted with adding passthrough HTML page rendering, parsed HTML title metadata extraction, Markdown-preference warnings for duplicate page bodies, tests, and README documentation. |
 
 ## Commit Attribution
 

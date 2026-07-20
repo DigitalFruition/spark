@@ -8,6 +8,7 @@ import express from "express";
 import mime from "mime";
 import MarkdownIt from "markdown-it";
 import matter from "gray-matter";
+import * as parse5 from "parse5";
 
 const md = new MarkdownIt({
   html: true,
@@ -316,22 +317,52 @@ function deriveTitle({ frontmatter, markdownText, filePath }) {
   return path.basename(filePath, path.extname(filePath));
 }
 
-function stripHtmlTags(htmlText) {
-  return htmlText
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+function collectNodeText(node) {
+  if (node.nodeName === "#text") return node.value ?? "";
+  if (!node.childNodes) return "";
+  return node.childNodes.map((child) => collectNodeText(child)).join("");
 }
 
-function deriveHtmlTitle(htmlText, filePath) {
-  const h1 = htmlText.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
-  if (h1) {
-    const title = stripHtmlTags(h1[1]);
-    if (title) return title;
+function normalizeTitleText(text) {
+  return String(text).replace(/\s+/g, " ").trim();
+}
+
+function isHtmlElement(node, tagName) {
+  return node.tagName === tagName && node.namespaceURI === "http://www.w3.org/1999/xhtml";
+}
+
+function extractHtmlPageMetadata(htmlText, filePath) {
+  const fragment = parse5.parseFragment(htmlText);
+  let title = null;
+  let h1Title = null;
+
+  function visit(node) {
+    if (!node.childNodes) return;
+
+    const retainedChildren = [];
+    for (const child of node.childNodes) {
+      if (isHtmlElement(child, "title")) {
+        title ??= normalizeTitleText(collectNodeText(child));
+        continue;
+      }
+
+      if (h1Title === null && isHtmlElement(child, "h1")) {
+        h1Title = normalizeTitleText(collectNodeText(child));
+      }
+
+      visit(child);
+      retainedChildren.push(child);
+    }
+
+    node.childNodes = retainedChildren;
   }
-  return path.basename(filePath, path.extname(filePath));
+
+  visit(fragment);
+
+  return {
+    bodyHtml: parse5.serialize(fragment),
+    title: title || h1Title || path.basename(filePath, path.extname(filePath)),
+  };
 }
 
 async function loadTemplate(templatePath, ctx) {
@@ -392,8 +423,9 @@ async function buildRenderer(config) {
     let title;
 
     if (absPagePath.endsWith(".html")) {
-      bodyHtml = pageText;
-      title = deriveHtmlTitle(pageText, absPagePath);
+      const parsed = extractHtmlPageMetadata(pageText, absPagePath);
+      bodyHtml = parsed.bodyHtml;
+      title = parsed.title;
     } else {
       const rendered = await renderMarkdownToHtml(pageText, absPagePath);
       bodyHtml = rendered.bodyHtml;
@@ -820,6 +852,7 @@ export {
   cliName,
   createPreviewApp,
   deriveTitle,
+  extractHtmlPageMetadata,
   guessSourceMdFromUrl,
   resolveSourceFromUrl,
   main,

@@ -250,6 +250,7 @@ dist/contact.html
 ```
 
 The HTML fragment is included directly as `{{body}}` inside `template.html`.
+If the fragment contains an HTML `<title>` element, SPARK uses it for `{{title}}` and removes it from the rendered page body.
 
 When both files exist for the same page, for example:
 
@@ -370,8 +371,9 @@ Replaced with the rendered Markdown page body or passthrough HTML page body.
 Populated from the first available source:
 
 1. `title` in frontmatter
-2. First Markdown H1 or HTML `<h1>`
-3. Page filename stem
+2. HTML `<title>` metadata in passthrough HTML content
+3. First Markdown H1 or HTML `<h1>`
+4. Page filename stem
 
 Titles are HTML-escaped when inserted into the template.
 

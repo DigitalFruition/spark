@@ -466,6 +466,48 @@ test("renders HTML content into a templated page without Markdown conversion", a
   assert.doesNotMatch(html, /<p><h1>|&lt;form/);
 });
 
+test("uses and removes embedded HTML title metadata before rendering page body", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(
+    path.join(srcDir, "content/contact.html"),
+    [
+      "<title>Legacy Contact &amp; Sales</title>",
+      "<h1>Contact Us</h1>",
+      "<p>Talk to the Digital Fruition team.</p>",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const { renderPageFromFile } = await buildRenderer(fixtureConfig(srcDir));
+  const { html, title } = await renderPageFromFile(path.join(srcDir, "content/contact.html"), true);
+
+  assert.equal(title, "Legacy Contact & Sales");
+  assert.match(html, /<title>Legacy Contact &amp; Sales<\/title>/);
+  assert.match(html, /<main>\s*<h1>Contact Us<\/h1>/);
+  assert.doesNotMatch(html, /<main>[\s\S]*<title>/);
+});
+
+test("uses first parsed HTML H1 when HTML title metadata is absent", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(
+    path.join(srcDir, "content/contact.html"),
+    [
+      "<section>",
+      "<h1>Contact <span>Digital Fruition</span></h1>",
+      "<p>Legacy HTML fragment.</p>",
+      "</section>",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const { renderPageFromFile } = await buildRenderer(fixtureConfig(srcDir));
+  const { html, title } = await renderPageFromFile(path.join(srcDir, "content/contact.html"), true);
+
+  assert.equal(title, "Contact Digital Fruition");
+  assert.match(html, /<title>Contact Digital Fruition<\/title>/);
+  assert.match(html, /<h1>Contact <span>Digital Fruition<\/span><\/h1>/);
+});
+
 test("uses frontmatter title and omits frontmatter from page body", async () => {
   const srcDir = await createFixtureWebsite();
   await fs.writeFile(
