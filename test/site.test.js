@@ -884,12 +884,14 @@ test("build writes default package error pages", async () => {
 
   assert.match(notFound, /<title>404 Not Found<\/title>/);
   assert.match(notFound, /<h1>404 Not Found<\/h1>/);
-  assert.match(notFound, /HTTP 404 means: Not Found\./);
+  assert.match(notFound, /The requested page could not be found\./);
+  assert.doesNotMatch(notFound, /HTTP 404 means: Not Found\./);
   assert.match(notFound, /<header>Fixture Header<\/header>/);
 
   assert.match(serverError, /<title>500 Internal Server Error<\/title>/);
   assert.match(serverError, /<h1>500 Internal Server Error<\/h1>/);
-  assert.match(serverError, /HTTP 500 means: Internal Server Error\./);
+  assert.match(serverError, /The server encountered an unexpected problem while rendering this page\./);
+  assert.doesNotMatch(serverError, /HTTP 500 means: Internal Server Error\./);
 });
 
 test("build lets site-local error pages override package defaults", async () => {
@@ -908,7 +910,6 @@ test("build lets site-local error pages override package defaults", async () => 
   assert.match(notFound, /<title>Custom Missing Page<\/title>/);
   assert.match(notFound, /<h1>Custom Missing<\/h1>/);
   assert.match(notFound, /Try the site search\./);
-  assert.doesNotMatch(notFound, /HTTP 404 means: Not Found\./);
 });
 
 test("preview maps root, extensionless, and html page routes consistently", async () => {
@@ -1037,7 +1038,6 @@ test("preview uses site-local 404 error page overrides", async () => {
   assert.match(missing.body, /<title>Custom Preview 404<\/title>/);
   assert.match(missing.body, /<h1>Nothing Here<\/h1>/);
   assert.match(missing.body, /Use the navigation\./);
-  assert.doesNotMatch(missing.body, /HTTP 404 means: Not Found\./);
 
   assert.equal(direct.status, 200);
   assert.equal(direct.body, missing.body);
