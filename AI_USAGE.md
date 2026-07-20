@@ -84,6 +84,7 @@ The following summaries describe known or planned AI-assisted work. They are int
 | 20 | Package publish metadata review | OpenAI Codex assisted with reviewing package metadata, package contents, public package posture, deterministic package-install verification, and public GitHub metadata. |
 | 21 | Replace placeholder sample content | OpenAI Codex assisted with replacing placeholder repository sample content, fixing navigation to existing pages, adding page-local current-nav styling, adding a nested sample page, and documenting the public-facing example structure. |
 | GH-02 | HTML content passthrough | OpenAI Codex assisted with adding passthrough HTML page rendering, parsed HTML title metadata extraction, Markdown-preference warnings for duplicate page bodies, tests, and README documentation. |
+| GH-04 | Customizable error pages | OpenAI Codex assisted with adding package default HTTP error page content, site-local error page overrides, static build output, preview 404/500 rendering, tests, and README documentation. |
 
 ## Commit Attribution
 

@@ -317,6 +317,42 @@ They exist only to build pages.
 
 ---
 
+## Error Pages
+
+DF SPARK ships default error page content under:
+
+```text
+errors/
+```
+
+Static build mode renders default pages for known HTTP `3xx`, `4xx`, and `5xx` status codes to:
+
+```text
+dist/errors/404.html
+dist/errors/500.html
+```
+
+Each default page includes the status code, recognized HTTP reason phrase, and a short human explanation.
+
+Sites can override any default by adding a matching project-local Markdown or HTML file:
+
+```text
+errors/404.md
+errors/500.html
+```
+
+Markdown overrides are rendered through `template.html`. HTML overrides are included as passthrough page bodies; embedded HTML `<title>` metadata is used for `{{title}}` and removed from the rendered body.
+
+For CDN deployments, configure the host to serve the generated error page path for the relevant status code. For example, use:
+
+```text
+dist/errors/404.html
+```
+
+as the custom not-found page.
+
+---
+
 # Template System
 
 The main template file is:
@@ -557,6 +593,7 @@ Features:
 * Supports includes
 * Supports Markdown rendering
 * Supports HTML page passthrough
+* Serves rendered 404 and 500 error pages
 * Suitable for local development
 
 The preview server binds to `127.0.0.1` by default. Use `--host 0.0.0.0` only when you intentionally need access from another device or container.
@@ -577,7 +614,7 @@ Output:
 dist/
 ```
 
-All supported content pages and Markdown components are rendered and written to disk.
+All supported content pages, Markdown components, and default or overridden error pages are rendered and written to disk.
 
 This mode is intended for CI/CD pipelines.
 

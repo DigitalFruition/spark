@@ -10,7 +10,14 @@ import test from "node:test";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
-import { DEFAULTS, build, buildRenderer, createPreviewApp, startPreviewServer } from "../site.js";
+import {
+  DEFAULTS,
+  DEFAULT_ERROR_STATUS_CODES,
+  build,
+  buildRenderer,
+  createPreviewApp,
+  startPreviewServer,
+} from "../site.js";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const execFileAsync = promisify(execFile);
@@ -862,6 +869,48 @@ test("build warns and prefers Markdown when matching HTML content also exists", 
   ]);
 });
 
+test("build writes default package error pages", async () => {
+  const srcDir = await createFixtureWebsite();
+
+  await build(fixtureConfig(srcDir));
+
+  const outDir = path.join(srcDir, "site-output");
+  for (const statusCode of DEFAULT_ERROR_STATUS_CODES) {
+    assert.equal(await pathExists(path.join(outDir, "errors", `${statusCode}.html`)), true);
+  }
+
+  const notFound = await fs.readFile(path.join(outDir, "errors/404.html"), "utf8");
+  const serverError = await fs.readFile(path.join(outDir, "errors/500.html"), "utf8");
+
+  assert.match(notFound, /<title>404 Not Found<\/title>/);
+  assert.match(notFound, /<h1>404 Not Found<\/h1>/);
+  assert.match(notFound, /HTTP 404 means: Not Found\./);
+  assert.match(notFound, /<header>Fixture Header<\/header>/);
+
+  assert.match(serverError, /<title>500 Internal Server Error<\/title>/);
+  assert.match(serverError, /<h1>500 Internal Server Error<\/h1>/);
+  assert.match(serverError, /HTTP 500 means: Internal Server Error\./);
+});
+
+test("build lets site-local error pages override package defaults", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.mkdir(path.join(srcDir, "errors"), { recursive: true });
+  await fs.writeFile(
+    path.join(srcDir, "errors/404.md"),
+    ["---", "title: Custom Missing Page", "---", "", "# Custom Missing", "", "Try the site search."].join("\n"),
+    "utf8",
+  );
+
+  await build(fixtureConfig(srcDir));
+
+  const notFound = await fs.readFile(path.join(srcDir, "site-output/errors/404.html"), "utf8");
+
+  assert.match(notFound, /<title>Custom Missing Page<\/title>/);
+  assert.match(notFound, /<h1>Custom Missing<\/h1>/);
+  assert.match(notFound, /Try the site search\./);
+  assert.doesNotMatch(notFound, /HTTP 404 means: Not Found\./);
+});
+
 test("preview maps root, extensionless, and html page routes consistently", async () => {
   const srcDir = await createFixtureWebsite();
   await fs.writeFile(
@@ -964,9 +1013,59 @@ test("preview returns 404 for missing pages and unsupported leaf trailing slash 
   const nestedTrailingSlash = await requestApp(app, "/docs/getting-started/");
 
   assert.equal(missing.status, 404);
-  assert.match(missing.body, /Not found: \/missing/);
+  assert.match(missing.headers["content-type"], /text\/html/);
+  assert.match(missing.body, /<title>404 Not Found<\/title>/);
+  assert.match(missing.body, /<h1>404 Not Found<\/h1>/);
   assert.equal(nestedTrailingSlash.status, 404);
-  assert.match(nestedTrailingSlash.body, /Not found: \/docs\/getting-started\//);
+  assert.match(nestedTrailingSlash.body, /<h1>404 Not Found<\/h1>/);
+});
+
+test("preview uses site-local 404 error page overrides", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.mkdir(path.join(srcDir, "errors"), { recursive: true });
+  await fs.writeFile(
+    path.join(srcDir, "errors/404.html"),
+    ["<title>Custom Preview 404</title>", "<h1>Nothing Here</h1>", "<p>Use the navigation.</p>"].join("\n"),
+    "utf8",
+  );
+
+  const app = await createPreviewApp(fixtureConfig(srcDir));
+  const missing = await requestApp(app, "/missing");
+  const direct = await requestApp(app, "/errors/404.html");
+
+  assert.equal(missing.status, 404);
+  assert.match(missing.body, /<title>Custom Preview 404<\/title>/);
+  assert.match(missing.body, /<h1>Nothing Here<\/h1>/);
+  assert.match(missing.body, /Use the navigation\./);
+  assert.doesNotMatch(missing.body, /HTTP 404 means: Not Found\./);
+
+  assert.equal(direct.status, 200);
+  assert.equal(direct.body, missing.body);
+});
+
+test("preview uses rendered 500 error pages for render failures", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(
+    path.join(srcDir, "content/broken.md"),
+    ["# Broken", "", "<!-- include: includes/missing.html -->"].join("\n"),
+    "utf8",
+  );
+  await fs.mkdir(path.join(srcDir, "errors"), { recursive: true });
+  await fs.writeFile(
+    path.join(srcDir, "errors/500.md"),
+    ["---", "title: Custom Render Error", "---", "", "# Something Broke", "", "The preview render failed."].join("\n"),
+    "utf8",
+  );
+
+  const app = await createPreviewApp(fixtureConfig(srcDir));
+  const broken = await requestApp(app, "/broken");
+
+  assert.equal(broken.status, 500);
+  assert.match(broken.headers["content-type"], /text\/html/);
+  assert.match(broken.body, /<title>Custom Render Error<\/title>/);
+  assert.match(broken.body, /<h1>Something Broke<\/h1>/);
+  assert.match(broken.body, /The preview render failed\./);
+  assert.doesNotMatch(broken.body, /Include missing: includes\/missing\.html/);
 });
 
 test("preview server serves an isolated fixture project over an ephemeral port", async () => {
@@ -1032,12 +1131,14 @@ test("preview server serves an isolated fixture project over an ephemeral port",
 
     const missing = await requestServer(server, "/missing");
     assert.equal(missing.status, 404);
-    assert.match(missing.body, /Not found: \/missing/);
+    assert.match(missing.headers["content-type"], /text\/html/);
+    assert.match(missing.body, /<h1>404 Not Found<\/h1>/);
 
     const broken = await requestServer(server, "/broken");
     assert.equal(broken.status, 500);
-    assert.match(broken.headers["content-type"], /text\/plain/);
-    assert.match(broken.body, /Include missing: includes\/missing\.html/);
+    assert.match(broken.headers["content-type"], /text\/html/);
+    assert.match(broken.body, /<h1>500 Internal Server Error<\/h1>/);
+    assert.doesNotMatch(broken.body, /Include missing: includes\/missing\.html/);
     assert.equal(broken.body.includes(srcDir), false);
   } finally {
     await closeServer(server);

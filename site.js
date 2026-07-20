@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import fssync from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { STATUS_CODES } from "node:http";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import mime from "mime";
@@ -17,8 +18,15 @@ const md = new MarkdownIt({
 });
 
 const ASSETS_DIR = "assets";
+const ERRORS_DIR = "errors";
 const ROOT_STATIC_FILES = ["favicon.ico", "robots.txt"];
 const DEFAULT_INCLUDE_DIRS = ["includes", "components"];
+const DEFAULT_ERROR_STATUS_CODES = Object.keys(STATUS_CODES)
+  .map(Number)
+  .filter((code) => code >= 300 && code < 600)
+  .sort((a, b) => a - b);
+const PACKAGE_ROOT = path.dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ERRORS_DIR = path.join(PACKAGE_ROOT, ERRORS_DIR);
 const VALUE_FLAGS = new Set(["content", "components", "includes", "template", "out", "port", "host"]);
 const BOOLEAN_FLAGS = new Set(["help"]);
 
@@ -501,6 +509,13 @@ function chooseContentPageSource(config, sources, warnOnce) {
   return sources.mdPath ?? sources.htmlPath ?? null;
 }
 
+function pageSourceCandidatesFromBase(basePath) {
+  return {
+    mdPath: basePath + ".md",
+    htmlPath: basePath + ".html",
+  };
+}
+
 async function listContentPageSources(absContentDir, config) {
   const pages = new Map();
 
@@ -524,6 +539,44 @@ async function listContentPageSources(absContentDir, config) {
       sourcePath: chooseContentPageSource(config, sources),
     }))
     .filter((page) => page.sourcePath);
+}
+
+function resolveErrorPageSource(statusCode, config) {
+  const statusName = String(statusCode);
+  const siteBasePath = path.resolve(config.srcDir, ERRORS_DIR, statusName);
+  const siteCandidates = pageSourceCandidatesFromBase(siteBasePath);
+  const siteSource = chooseContentPageSource(config, {
+    mdPath: fssync.existsSync(siteCandidates.mdPath) ? siteCandidates.mdPath : null,
+    htmlPath: fssync.existsSync(siteCandidates.htmlPath) ? siteCandidates.htmlPath : null,
+  });
+
+  if (siteSource) return siteSource;
+
+  const packageBasePath = path.resolve(PACKAGE_ERRORS_DIR, statusName);
+  const packageCandidates = pageSourceCandidatesFromBase(packageBasePath);
+  return chooseContentPageSource(config, {
+    mdPath: fssync.existsSync(packageCandidates.mdPath) ? packageCandidates.mdPath : null,
+    htmlPath: fssync.existsSync(packageCandidates.htmlPath) ? packageCandidates.htmlPath : null,
+  });
+}
+
+async function renderErrorPage(statusCode, config, renderPageFromFile) {
+  const sourcePath = resolveErrorPageSource(statusCode, config);
+  if (!sourcePath) {
+    return `<h1>${statusCode} ${escapeHtml(STATUS_CODES[statusCode] ?? "Error")}</h1>`;
+  }
+
+  const { html } = await renderPageFromFile(sourcePath, true);
+  return html;
+}
+
+async function writeErrorPages(config, outDir, renderPageFromFile) {
+  for (const statusCode of DEFAULT_ERROR_STATUS_CODES) {
+    const html = await renderErrorPage(statusCode, config, renderPageFromFile);
+    const outPath = path.join(outDir, ERRORS_DIR, `${statusCode}.html`);
+    await ensureDir(path.dirname(outPath));
+    await fs.writeFile(outPath, html, "utf8");
+  }
 }
 
 async function copyStaticAssets(config, outDir) {
@@ -588,6 +641,8 @@ async function build(config) {
       await fs.writeFile(outPath, html, "utf8");
     }
   }
+
+  await writeErrorPages(config, absOutDir, renderPageFromFile);
 
   // Copy only intentional static assets, not arbitrary files from the website root.
   await copyStaticAssets(config, absOutDir);
@@ -716,15 +771,41 @@ async function createPreviewApp(config) {
 
   const app = express();
 
+  async function sendErrorPage(res, statusCode) {
+    try {
+      const html = await renderErrorPage(statusCode, config, renderPageFromFile);
+      res.status(statusCode);
+      res.setHeader("Cache-Control", "no-store");
+      res.type("text/html").send(html);
+    } catch {
+      res
+        .status(statusCode)
+        .type("text/html")
+        .send(`<h1>${statusCode} ${escapeHtml(STATUS_CODES[statusCode] ?? "Error")}</h1>`);
+    }
+  }
+
   // Serve built assets if present, plus any static files in repo (css/js/images)
   app.use("/" + config.outDir, express.static(absOutDir));
+
+  app.get(`/${ERRORS_DIR}/:statusCode.html`, async (req, res) => {
+    const statusCode = Number(req.params.statusCode);
+    if (!DEFAULT_ERROR_STATUS_CODES.includes(statusCode)) {
+      await sendErrorPage(res, 404);
+      return;
+    }
+
+    const html = await renderErrorPage(statusCode, config, renderPageFromFile);
+    res.setHeader("Cache-Control", "no-store");
+    res.type("text/html").send(html);
+  });
 
   app.get("/" + config.componentsDir + "/*", async (req, res) => {
     try {
       const { absPath } = guessSourceMdFromUrl(req.path, config);
 
       if (!fssync.existsSync(absPath)) {
-        res.status(404).type("text/html").send(`<h1>404</h1><p>Not found: ${escapeHtml(req.path)}</p>`);
+        await sendErrorPage(res, 404);
         return;
       }
 
@@ -741,10 +822,10 @@ async function createPreviewApp(config) {
       res.type("text/html").send(html);
     } catch (e) {
       if (e instanceof IncludeError) {
-        res.status(500).type("text/plain").send(e.message);
+        await sendErrorPage(res, 500);
         return;
       }
-      res.status(500).type("text/plain").send(String(e?.stack || e));
+      await sendErrorPage(res, 500);
     }
   });
 
@@ -763,7 +844,7 @@ async function createPreviewApp(config) {
       const { absPath, kind } = resolveSourceFromUrl(req.path, config, duplicateContentWarnings);
 
       if (!absPath) {
-        res.status(404).type("text/html").send(`<h1>404</h1><p>Not found: ${escapeHtml(req.path)}</p>`);
+        await sendErrorPage(res, 404);
         return;
       }
 
@@ -782,10 +863,10 @@ async function createPreviewApp(config) {
       res.type("text/html").send(html);
     } catch (e) {
       if (e instanceof IncludeError) {
-        res.status(500).type("text/plain").send(e.message);
+        await sendErrorPage(res, 500);
         return;
       }
-      res.status(500).type("text/plain").send(String(e?.stack || e));
+      await sendErrorPage(res, 500);
     }
   });
 
@@ -847,6 +928,7 @@ async function runCli() {
 
 export {
   DEFAULTS,
+  DEFAULT_ERROR_STATUS_CODES,
   build,
   buildRenderer,
   cliName,
@@ -854,6 +936,8 @@ export {
   deriveTitle,
   extractHtmlPageMetadata,
   guessSourceMdFromUrl,
+  renderErrorPage,
+  resolveErrorPageSource,
   resolveSourceFromUrl,
   main,
   parseArgs,
