@@ -443,6 +443,29 @@ test("renders Markdown content into a templated HTML page", async () => {
   assert.doesNotMatch(html, /{{body}}|{{title}}/);
 });
 
+test("renders HTML content into a templated page without Markdown conversion", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(
+    path.join(srcDir, "content/contact.html"),
+    [
+      "<h1>Contact Us</h1>",
+      "<form action=\"/contact\" method=\"post\">",
+      "<label>Name <input name=\"name\"></label>",
+      "</form>",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const { renderPageFromFile } = await buildRenderer(fixtureConfig(srcDir));
+  const { html, title } = await renderPageFromFile(path.join(srcDir, "content/contact.html"), true);
+
+  assert.equal(title, "Contact Us");
+  assert.match(html, /<title>Contact Us<\/title>/);
+  assert.match(html, /<main><h1>Contact Us<\/h1>/);
+  assert.match(html, /<form action="\/contact" method="post">/);
+  assert.doesNotMatch(html, /<p><h1>|&lt;form/);
+});
+
 test("uses frontmatter title and omits frontmatter from page body", async () => {
   const srcDir = await createFixtureWebsite();
   await fs.writeFile(
@@ -742,6 +765,61 @@ test("build maps content Markdown files to classic HTML output paths", async () 
   assert.equal(await pathExists(path.join(outDir, "docs/getting-started/index.html")), false);
 });
 
+test("build maps HTML-only content files to templated HTML output paths", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.mkdir(path.join(srcDir, "content/forms"), { recursive: true });
+  await fs.writeFile(
+    path.join(srcDir, "content/forms/contact.html"),
+    [
+      "<h1>Contact Us</h1>",
+      "<form>",
+      "<button type=\"submit\">Send</button>",
+      "</form>",
+    ].join("\n"),
+    "utf8",
+  );
+
+  await build(fixtureConfig(srcDir));
+
+  const outDir = path.join(srcDir, "site-output");
+  const rendered = await fs.readFile(path.join(outDir, "forms/contact.html"), "utf8");
+
+  assert.match(rendered, /<title>Contact Us<\/title>/);
+  assert.match(rendered, /<main><h1>Contact Us<\/h1>/);
+  assert.match(rendered, /<button type="submit">Send<\/button>/);
+});
+
+test("build warns and prefers Markdown when matching HTML content also exists", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(
+    path.join(srcDir, "content/about.md"),
+    ["# Markdown About", "", "Markdown body."].join("\n"),
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(srcDir, "content/about.html"),
+    ["<h1>HTML About</h1>", "<p>HTML body.</p>"].join("\n"),
+    "utf8",
+  );
+
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = (message) => warnings.push(message);
+  try {
+    await build(fixtureConfig(srcDir));
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  const rendered = await fs.readFile(path.join(srcDir, "site-output/about.html"), "utf8");
+  assert.match(rendered, /<h1>Markdown About<\/h1>/);
+  assert.match(rendered, /Markdown body\./);
+  assert.doesNotMatch(rendered, /HTML body\./);
+  assert.deepEqual(warnings, [
+    "Warning: both content/about.md and content/about.html exist; using Markdown file.",
+  ]);
+});
+
 test("preview maps root, extensionless, and html page routes consistently", async () => {
   const srcDir = await createFixtureWebsite();
   await fs.writeFile(
@@ -775,6 +853,59 @@ test("preview maps root, extensionless, and html page routes consistently", asyn
   assert.equal(nestedHtml.status, 200);
   assert.equal(nested.body, nestedHtml.body);
   assert.match(nested.body, /Nested page body\./);
+});
+
+test("preview maps HTML-only content pages through extensionless and html routes", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(
+    path.join(srcDir, "content/contact.html"),
+    ["<h1>Contact Us</h1>", "<p>Legacy HTML fragment.</p>"].join("\n"),
+    "utf8",
+  );
+
+  const app = await createPreviewApp(fixtureConfig(srcDir));
+  const contact = await requestApp(app, "/contact");
+  const contactHtml = await requestApp(app, "/contact.html");
+
+  assert.equal(contact.status, 200);
+  assert.equal(contactHtml.status, 200);
+  assert.equal(contact.body, contactHtml.body);
+  assert.match(contact.body, /<title>Contact Us<\/title>/);
+  assert.match(contact.body, /<main><h1>Contact Us<\/h1>/);
+  assert.match(contact.body, /Legacy HTML fragment\./);
+});
+
+test("preview warns and prefers Markdown when matching HTML content also exists", async () => {
+  const srcDir = await createFixtureWebsite();
+  await fs.writeFile(
+    path.join(srcDir, "content/about.md"),
+    ["# Markdown About", "", "Markdown preview body."].join("\n"),
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(srcDir, "content/about.html"),
+    ["<h1>HTML About</h1>", "<p>HTML preview body.</p>"].join("\n"),
+    "utf8",
+  );
+
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = (message) => warnings.push(message);
+  try {
+    const app = await createPreviewApp(fixtureConfig(srcDir));
+    const about = await requestApp(app, "/about");
+
+    assert.equal(about.status, 200);
+    assert.match(about.body, /<h1>Markdown About<\/h1>/);
+    assert.match(about.body, /Markdown preview body\./);
+    assert.doesNotMatch(about.body, /HTML preview body\./);
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.deepEqual(warnings, [
+    "Warning: both content/about.md and content/about.html exist; using Markdown file.",
+  ]);
 });
 
 test("preview returns 404 for missing pages and unsupported leaf trailing slash aliases", async () => {

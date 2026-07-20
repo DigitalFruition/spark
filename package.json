@@ -1,7 +1,7 @@
 {
   "name": "@digitalfruition/spark",
   "version": "0.1.0",
-  "description": "Digital Fruition SPARK static Markdown site generator.",
+  "description": "Digital Fruition SPARK static site generator.",
   "type": "module",
   "main": "./site.js",
   "exports": {
