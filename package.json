@@ -1,7 +1,7 @@
 {
   "name": "@digitalfruition/spark",
   "version": "0.1.0",
-  "description": "Digital Fruition SPARK static Markdown site generator.",
+  "description": "Digital Fruition SPARK static site generator.",
   "type": "module",
   "main": "./site.js",
   "exports": {
@@ -52,6 +52,7 @@
     "express": "^4.22.1",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.1",
-    "mime": "^4.1.0"
+    "mime": "^4.1.0",
+    "parse5": "^8.0.1"
   }
 }

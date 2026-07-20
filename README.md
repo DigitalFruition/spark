@@ -2,7 +2,7 @@
 
 Digital Fruition SPARK is a lightweight static website generator written in Node.js.
 
-It converts Markdown files into HTML pages using a shared HTML template and reusable include files. It supports both:
+It converts Markdown and passthrough HTML content into HTML pages using a shared HTML template and reusable include files. It supports both:
 
 * **Live preview mode** for local development
 * **Static build mode** for CI/CD pipelines and CDN deployment
@@ -134,7 +134,7 @@ It demonstrates:
 
 ## Simplicity
 
-Content should be written as Markdown files stored directly in Git.
+Content should be written as Markdown or HTML files stored directly in Git.
 
 No databases, build servers, CMS platforms, or runtime dependencies are required once the site is published.
 
@@ -235,6 +235,32 @@ dist/about.html
 
 The generated HTML is wrapped using `template.html`.
 
+HTML files under `content/` are also supported when no Markdown file exists for the same page.
+
+Example:
+
+```text
+content/contact.html
+```
+
+becomes:
+
+```text
+dist/contact.html
+```
+
+The HTML fragment is included directly as `{{body}}` inside `template.html`.
+If the fragment contains an HTML `<title>` element, SPARK uses it for `{{title}}` and removes it from the rendered page body.
+
+When both files exist for the same page, for example:
+
+```text
+content/contact.md
+content/contact.html
+```
+
+SPARK prints a warning and uses the Markdown file.
+
 ---
 
 ## Components
@@ -332,7 +358,7 @@ Example:
 {{body}}
 ```
 
-Replaced with rendered Markdown content.
+Replaced with the rendered Markdown page body or passthrough HTML page body.
 
 ---
 
@@ -345,8 +371,9 @@ Replaced with rendered Markdown content.
 Populated from the first available source:
 
 1. `title` in frontmatter
-2. First Markdown H1
-3. Markdown filename stem
+2. HTML `<title>` metadata in passthrough HTML content
+3. First Markdown H1 or HTML `<h1>`
+4. Page filename stem
 
 Titles are HTML-escaped when inserted into the template.
 
@@ -366,7 +393,7 @@ Markdown components may also be included:
 <!-- include: components/sidebar.md -->
 ```
 
-The same include syntax works in `template.html`, Markdown pages under `content/`, HTML fragments under `includes/`, and Markdown components under `components/`.
+The same include syntax works in `template.html`, Markdown and HTML pages under `content/`, HTML fragments under `includes/`, and Markdown components under `components/`.
 
 Include targets must be relative paths under one of these project source directories:
 
@@ -390,7 +417,7 @@ Missing includes, include cycles, absolute-path includes, and includes that use 
 
 # Frontmatter
 
-Optional YAML frontmatter may be added to any page.
+Optional YAML frontmatter may be added to any Markdown page.
 
 Example:
 
@@ -416,7 +443,7 @@ Frontmatter is metadata only and is not rendered into the page body.
 
 ## Page Output Mapping
 
-Static build mode writes Markdown pages under `content/` to matching `.html` files under `dist/`.
+Static build mode writes Markdown pages and HTML-only pages under `content/` to matching `.html` files under `dist/`.
 
 ```text
 content/index.md
@@ -529,6 +556,7 @@ Features:
 * No build step required
 * Supports includes
 * Supports Markdown rendering
+* Supports HTML page passthrough
 * Suitable for local development
 
 The preview server binds to `127.0.0.1` by default. Use `--host 0.0.0.0` only when you intentionally need access from another device or container.
@@ -549,7 +577,7 @@ Output:
 dist/
 ```
 
-All Markdown files are rendered and written to disk.
+All supported content pages and Markdown components are rendered and written to disk.
 
 This mode is intended for CI/CD pipelines.
 

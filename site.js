@@ -8,6 +8,7 @@ import express from "express";
 import mime from "mime";
 import MarkdownIt from "markdown-it";
 import matter from "gray-matter";
+import * as parse5 from "parse5";
 
 const md = new MarkdownIt({
   html: true,
@@ -89,7 +90,7 @@ Primary npm scripts:
   npm run serve
 
 Options:
-  --content <dir>      Markdown page source directory. Default: content
+  --content <dir>      Markdown or HTML page source directory. Default: content
   --components <dir>   Markdown component source directory. Default: components
   --includes <dir>     Include fragment source directory. Default: includes
   --template <file>    HTML template file. Default: template.html
@@ -316,6 +317,54 @@ function deriveTitle({ frontmatter, markdownText, filePath }) {
   return path.basename(filePath, path.extname(filePath));
 }
 
+function collectNodeText(node) {
+  if (node.nodeName === "#text") return node.value ?? "";
+  if (!node.childNodes) return "";
+  return node.childNodes.map((child) => collectNodeText(child)).join("");
+}
+
+function normalizeTitleText(text) {
+  return String(text).replace(/\s+/g, " ").trim();
+}
+
+function isHtmlElement(node, tagName) {
+  return node.tagName === tagName && node.namespaceURI === "http://www.w3.org/1999/xhtml";
+}
+
+function extractHtmlPageMetadata(htmlText, filePath) {
+  const fragment = parse5.parseFragment(htmlText);
+  let title = null;
+  let h1Title = null;
+
+  function visit(node) {
+    if (!node.childNodes) return;
+
+    const retainedChildren = [];
+    for (const child of node.childNodes) {
+      if (isHtmlElement(child, "title")) {
+        title ??= normalizeTitleText(collectNodeText(child));
+        continue;
+      }
+
+      if (h1Title === null && isHtmlElement(child, "h1")) {
+        h1Title = normalizeTitleText(collectNodeText(child));
+      }
+
+      visit(child);
+      retainedChildren.push(child);
+    }
+
+    node.childNodes = retainedChildren;
+  }
+
+  visit(fragment);
+
+  return {
+    bodyHtml: parse5.serialize(fragment),
+    title: title || h1Title || path.basename(filePath, path.extname(filePath)),
+  };
+}
+
 async function loadTemplate(templatePath, ctx) {
   const raw = await readText(templatePath);
   const withIncludes = await renderIncludes(raw, ctx);
@@ -368,9 +417,21 @@ async function buildRenderer(config) {
 
   const templateHtml = await loadTemplate(templatePath, ctxBase);
 
-  async function renderPageFromFile(absMdPath, wrapInTemplate) {
-    const mdText = await readText(absMdPath);
-    const { bodyHtml, title } = await renderMarkdownToHtml(mdText, absMdPath);
+  async function renderPageFromFile(absPagePath, wrapInTemplate) {
+    const pageText = await readText(absPagePath);
+    let bodyHtml;
+    let title;
+
+    if (absPagePath.endsWith(".html")) {
+      const parsed = extractHtmlPageMetadata(pageText, absPagePath);
+      bodyHtml = parsed.bodyHtml;
+      title = parsed.title;
+    } else {
+      const rendered = await renderMarkdownToHtml(pageText, absPagePath);
+      bodyHtml = rendered.bodyHtml;
+      title = rendered.title;
+    }
+
     const bodyWithIncludes = await renderIncludes(bodyHtml, { ...ctxBase, visited: new Set() });
 
     if (!wrapInTemplate) {
@@ -415,6 +476,56 @@ async function* walkFiles(dir) {
   }
 }
 
+function contentPageKey(filePath) {
+  if (filePath.endsWith(".md")) return filePath.slice(0, -".md".length);
+  if (filePath.endsWith(".html")) return filePath.slice(0, -".html".length);
+  return null;
+}
+
+function warnDuplicateContentPage(config, mdPath, htmlPath, warnOnce) {
+  const key = `${mdPath}\0${htmlPath}`;
+  if (warnOnce?.has(key)) return;
+  warnOnce?.add(key);
+
+  console.warn(
+    `Warning: both ${displayPath(mdPath, config.srcDir)} and ${displayPath(htmlPath, config.srcDir)} exist; using Markdown file.`,
+  );
+}
+
+function chooseContentPageSource(config, sources, warnOnce) {
+  if (sources.mdPath && sources.htmlPath) {
+    warnDuplicateContentPage(config, sources.mdPath, sources.htmlPath, warnOnce);
+    return sources.mdPath;
+  }
+
+  return sources.mdPath ?? sources.htmlPath ?? null;
+}
+
+async function listContentPageSources(absContentDir, config) {
+  const pages = new Map();
+
+  for await (const file of walkFiles(absContentDir)) {
+    const key = contentPageKey(file);
+    if (!key) continue;
+
+    const entry = pages.get(key) ?? {};
+    if (file.endsWith(".md")) {
+      entry.mdPath = file;
+    } else {
+      entry.htmlPath = file;
+    }
+    pages.set(key, entry);
+  }
+
+  return [...pages.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, sources]) => ({
+      relBase: path.relative(absContentDir, key),
+      sourcePath: chooseContentPageSource(config, sources),
+    }))
+    .filter((page) => page.sourcePath);
+}
+
 async function copyStaticAssets(config, outDir) {
   const absAssetsDir = path.resolve(config.srcDir, ASSETS_DIR);
 
@@ -454,13 +565,12 @@ async function build(config) {
   const { renderPageFromFile } = await buildRenderer(config);
 
   // Render content pages (wrapped)
-  for await (const file of walkFiles(absContentDir)) {
-    if (!file.endsWith(".md")) continue;
-    const rel = path.relative(absContentDir, file);
-    const outRel = changeExt(rel, ".html");
+  const contentPages = await listContentPageSources(absContentDir, config);
+  for (const { relBase, sourcePath } of contentPages) {
+    const outRel = relBase + ".html";
     const outPath = path.join(absOutDir, outRel);
 
-    const { html } = await renderPageFromFile(file, true);
+    const { html } = await renderPageFromFile(sourcePath, true);
     await ensureDir(path.dirname(outPath));
     await fs.writeFile(outPath, html, "utf8");
   }
@@ -519,6 +629,54 @@ function guessSourceMdFromUrl(urlPath, config) {
   return { kind: "page", absPath: path.resolve(config.srcDir, config.contentDir, mdRel) };
 }
 
+function pageSourceCandidatesFromUrl(urlPath, config) {
+  let p = urlPath.split("?")[0].split("#")[0];
+  if (!p.startsWith("/")) p = "/" + p;
+
+  if (p === "/") {
+    return {
+      kind: "page",
+      mdPath: path.resolve(config.srcDir, config.contentDir, "index.md"),
+      htmlPath: path.resolve(config.srcDir, config.contentDir, "index.html"),
+    };
+  }
+
+  if (p.endsWith(".html")) {
+    p = changeExt(p, "");
+  }
+
+  const rel = p.endsWith("/") ? path.join(p, "index") : p;
+  const baseRel = rel.replace(/^\//, "");
+
+  return {
+    kind: "page",
+    mdPath: path.resolve(config.srcDir, config.contentDir, baseRel + ".md"),
+    htmlPath: path.resolve(config.srcDir, config.contentDir, baseRel + ".html"),
+  };
+}
+
+function resolveSourceFromUrl(urlPath, config, warnOnce) {
+  const mdGuess = guessSourceMdFromUrl(urlPath, config);
+
+  if (mdGuess.kind === "component") {
+    return {
+      kind: mdGuess.kind,
+      absPath: fssync.existsSync(mdGuess.absPath) ? mdGuess.absPath : null,
+    };
+  }
+
+  const candidates = pageSourceCandidatesFromUrl(urlPath, config);
+  const sources = {
+    mdPath: fssync.existsSync(candidates.mdPath) ? candidates.mdPath : null,
+    htmlPath: fssync.existsSync(candidates.htmlPath) ? candidates.htmlPath : null,
+  };
+
+  return {
+    kind: candidates.kind,
+    absPath: chooseContentPageSource(config, sources, warnOnce),
+  };
+}
+
 async function startPreviewServer(config) {
   config = { ...DEFAULTS, ...config };
   validatePort(Number(config.port));
@@ -554,6 +712,7 @@ async function createPreviewApp(config) {
   const absOutDir = path.resolve(config.srcDir, config.outDir);
   await assertDirectory("content", path.resolve(config.srcDir, config.contentDir), config.srcDir);
   const { renderPageFromFile } = await buildRenderer(config);
+  const duplicateContentWarnings = new Set();
 
   const app = express();
 
@@ -601,9 +760,9 @@ async function createPreviewApp(config) {
 
   app.get("*", async (req, res) => {
     try {
-      const { absPath, kind } = guessSourceMdFromUrl(req.path, config);
+      const { absPath, kind } = resolveSourceFromUrl(req.path, config, duplicateContentWarnings);
 
-      if (!fssync.existsSync(absPath)) {
+      if (!absPath) {
         res.status(404).type("text/html").send(`<h1>404</h1><p>Not found: ${escapeHtml(req.path)}</p>`);
         return;
       }
@@ -693,7 +852,9 @@ export {
   cliName,
   createPreviewApp,
   deriveTitle,
+  extractHtmlPageMetadata,
   guessSourceMdFromUrl,
+  resolveSourceFromUrl,
   main,
   parseArgs,
   renderMarkdownToHtml,
